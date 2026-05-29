@@ -29,6 +29,13 @@ GitHub Actions step or a one-off `pveam` template + `pct create`).
   expected number of adopted devices. Useful in CI to fail fast if
   simulation didn't fully synthesize.
 
+- `reset-controller.sh` — Wipes the Network app's data volume (mongo,
+  `system.properties`, keystore) and restarts uosserver. Preserves UOS-level
+  state (admin account, API keys). Use between acceptance-test runs to undo
+  whatever state previous tests left behind. After it returns, run
+  `bootstrap.sh` again to obtain a fresh integration API key (the previous
+  key references the now-wiped Network site and may not work).
+
 ## Typical use
 
 ```sh
@@ -44,6 +51,31 @@ task test:acc:uos
 The three env vars (`UNIFI_API`, `UNIFI_API_KEY`, `UNIFI_INSECURE`) are the
 same ones the existing `hardware` target consumes, so the same provider code
 runs against either.
+
+## Fast local dev loop: Proxmox LXC snapshots
+
+If your UOS Server is hosted in a Proxmox LXC and the storage backend is ZFS
+or any other snapshot-capable driver, snapshot/rollback is dramatically
+faster than running `reset-controller.sh + bootstrap.sh + enable-simulation.sh`
+between test runs. The scripts here remain the canonical CI path (no
+Proxmox dependency); snapshots are a local-dev convenience.
+
+```sh
+# One-time, after the initial bootstrap.sh + ENABLE_FAKE_DEVICES=1:
+pct snapshot <VMID> clean --description "uosserver bootstrapped + 6 simulated devices adopted"
+
+# Between test runs:
+pct rollback <VMID> clean   # ~2 s; controller comes back already-bootstrapped
+
+# To update the baseline (e.g. after upgrading uosserver):
+pct snapshot <VMID> clean-$(date +%Y%m%d) --description "..."  # keep history
+pct delsnapshot <VMID> clean     # only after the new one is proven
+pct snapshot <VMID> clean
+```
+
+The CI workflow (§8 L05) will not use snapshots — it installs UOS fresh on
+each run via `bootstrap.sh`. The local dev loop is the only place this
+matters.
 
 ## Defaults
 

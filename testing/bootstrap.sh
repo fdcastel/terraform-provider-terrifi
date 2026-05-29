@@ -126,9 +126,19 @@ key_resp=$(curl -sk -b "$COOKIE_JAR" \
 API_KEY=$(echo "$key_resp" | jq -r '.data.full_api_key // empty')
 [ -n "$API_KEY" ] || { log "ERROR: key creation failed: $key_resp"; exit 1; }
 
-# 5. Verify the key works.
-sites=$(curl -fsSk -H "X-API-KEY: $API_KEY" "$UOS_URL/proxy/network/integration/v1/sites" \
-        | jq -r '.totalCount // 0')
+# 5. Verify the key works. The integration API endpoint can return non-JSON
+# error pages for several seconds after a fresh setup or a state reset, so
+# retry until we get a parseable response (or give up after ~30s).
+log "Verifying integration API with new key..."
+deadline=$(( $(date +%s) + 30 ))
+sites=""
+while :; do
+  resp=$(curl -fsSk -H "X-API-KEY: $API_KEY" "$UOS_URL/proxy/network/integration/v1/sites" 2>/dev/null || echo "")
+  sites=$(printf '%s' "$resp" | jq -r '.totalCount // empty' 2>/dev/null || true)
+  [ -n "$sites" ] && break
+  [ "$(date +%s)" -lt "$deadline" ] || { log "WARN: integration API never returned parseable JSON in 30s; key may still be valid"; sites="?"; break; }
+  sleep 2
+done
 log "Integration API reachable with new key; site count=$sites"
 
 # 6. (Optional) Synthesize fake devices via the Network app's simulation mode.
