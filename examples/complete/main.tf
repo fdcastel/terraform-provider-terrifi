@@ -22,8 +22,12 @@ terraform {
 }
 
 # Provider configuration comes from environment variables
-# (UNIFI_API, UNIFI_API_KEY or UNIFI_USERNAME/PASSWORD, UNIFI_INSECURE).
-provider "terrifi" {}
+# (UNIFI_API, UNIFI_API_KEY or UNIFI_USERNAME/PASSWORD, UNIFI_INSECURE). No
+# explicit `provider "terrifi" {}` block: the empty block is redundant under
+# env-var config, and omitting it lets the acceptance-test harness
+# (TestAccCompleteNetwork_basic) inject the in-process provider without a
+# "providers must only be specified at the TestCase or TestStep level"
+# conflict. Add one here only if you need to set api_url/username inline.
 
 variable "wifi_passphrase" {
   type        = string
