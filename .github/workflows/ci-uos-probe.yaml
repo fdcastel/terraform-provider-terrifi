@@ -41,6 +41,23 @@ jobs:
           echo "slirp4netns: $(slirp4netns --version | head -1)"
           echo "::notice title=Phase timing::prereqs took $(( $(date +%s) - start ))s"
 
+      - name: Make runner home config traversable for rootless podman
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          # The UOS installer derives the "invoking user" from the runner's
+          # loginuid (immutable, = runner) regardless of SUDO_USER/HOME, and
+          # its image-load step runs podman pointed at
+          # /home/runner/.config/containers/storage.conf. That path lives under
+          # a 0700 home the uosserver service user cannot traverse, so the load
+          # dies with "stat ... permission denied". Open up just the container
+          # config path (read+traverse) and drop a minimal storage.conf so the
+          # stat succeeds and podman falls back to its compiled storage default.
+          sudo mkdir -p /home/runner/.config/containers
+          printf '[storage]\ndriver = "overlay"\n' | sudo tee /home/runner/.config/containers/storage.conf >/dev/null
+          sudo chmod a+rx /home/runner /home/runner/.config /home/runner/.config/containers
+          sudo chmod a+r /home/runner/.config/containers/storage.conf
+
       - name: Install UOS Server (pinned 5.1.15)
         timeout-minutes: 12
         run: |
