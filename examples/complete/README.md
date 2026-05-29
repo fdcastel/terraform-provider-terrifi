@@ -54,6 +54,20 @@ Confirmed on Network app 10.3.58 and 10.4.57 — see
 toggle keeps the core example applying everywhere while still exercising the
 ZBF resources on a hardware target.
 
+## A note on controller load
+
+`TestAccCompleteNetwork_basic` applies this whole directory at once, so
+Terraform creates ~14 resources with its default parallelism (10). Against a
+fresh docker controller this completes in a few seconds. Against a modestly
+resourced controller that is **also running adopted (or simulated) devices**,
+the burst of concurrent `networkconf` writes can each exceed the provider's
+30 s HTTP timeout, because the controller recomputes device configuration on
+every network change. If you hit `context deadline exceeded` running this on
+such a target, run it against an idle controller (no adopted/simulated
+devices), or apply with reduced parallelism (`terraform apply
+-parallelism=2`). The per-resource acceptance tests already prove each
+resource individually; this fixture proves they compose.
+
 ## Coverage vs. the reference
 
 Implemented and exercised here: `terrifi_network` (×5), `terrifi_wlan` (×3),
