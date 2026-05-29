@@ -37,14 +37,17 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          missing=
-          [ -z "$GPG_PRIVATE_KEY" ] && missing="$missing GPG_PRIVATE_KEY"
-          [ -z "$GPG_PASSPHRASE" ] && missing="$missing GPG_PASSPHRASE"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing required release secret(s):$missing. See the header comment in .github/workflows/release.yml for how to set them."
+          # GPG_PRIVATE_KEY is required. GPG_PASSPHRASE is OPTIONAL on this
+          # fork lineage because the fdcastel signing key is passphraseless;
+          # the import action treats an empty passphrase as "no passphrase".
+          # (Upstream's §0 release.yml requires both, which is the right
+          # default for a passphrase-protected key.)
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::Missing required release secret GPG_PRIVATE_KEY. See the header comment in .github/workflows/release.yml for how to set it."
             exit 1
           fi
-          echo "Required release secrets are present."
+          [ -z "$GPG_PASSPHRASE" ] && echo "::notice::GPG_PASSPHRASE not set — assuming a passphraseless key."
+          echo "Required release secret GPG_PRIVATE_KEY is present."
       - name: Checkout
         uses: actions/checkout@v6
         with:
