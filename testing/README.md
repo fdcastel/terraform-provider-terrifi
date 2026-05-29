@@ -77,6 +77,36 @@ The CI workflow (§8 L05) will not use snapshots — it installs UOS fresh on
 each run via `bootstrap.sh`. The local dev loop is the only place this
 matters.
 
+## Known limitation: firewall zones require real adopted hardware
+
+The `terrifi_firewall_zone`, `terrifi_firewall_policy`, and
+`terrifi_firewall_policy_order` resources are gated `requireHardware(t)`
+in their test files for a reason that is **not specific to the
+provider** — it is a controller-side gap in simulation mode.
+
+The v2 `/firewall/zone` endpoint requires the "Hotspot" default zone
+to exist before any user-created zone can be added. Real adopted UGWs
+trigger the controller to seed the six default zones (Internal,
+External, DMZ, Hotspot, IoT, VPN) automatically. The Network app's
+built-in simulation mode does NOT seed them, even after a fully
+adopted simulated UGW reaches `state=1` (Connected). Tried and ruled
+out:
+
+- Creating a guest-purpose network (no effect).
+- Creating a guest WLAN (`is_guest=true`).
+- Direct POST of a zone with `default_zone:true` / `zone_key:"Hotspot"`
+  / `defaultZone:true` / `zoneKey:"Hotspot"` (all four field shapes
+  rejected by the create-zone schema).
+- Hypothetical `/firewall/zone/init` endpoint (returns 405).
+- Toggling a settings flag (no firewall/zone setting key exists).
+
+Confirmed on UOS Server 5.0.8 (Network app `linuxserver/unifi-network-application:10.3.58`)
+and UOS Server 5.1.15 (Network app `10.4.57`).
+
+These tests therefore remain hardware-only and run only via the
+`TERRIFI_ACC_TARGET=hardware` target against a real UniFi deployment.
+The `uos` target validates everything else.
+
 ## Defaults
 
 - Admin credentials: `admin` / `TerrifiTest!2026` — override via `ADMIN_USER`
