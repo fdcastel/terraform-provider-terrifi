@@ -1,9 +1,8 @@
 package provider
 
-// Local CRUD methods for the v2 static-dns endpoint. These shadow the promoted
-// github.com/ubiquiti-community/go-unifi methods on *Client and use the local
-// internal/unifi types instead, removing the SDK dependency for this resource
-// — see issue #157.
+// CRUD methods for the v2 static-dns endpoint
+// (/v2/api/site/{site}/static-dns). No envelope; per-ID GET is not exposed
+// so GetDNSRecord lists and filters.
 
 import (
 	"context"

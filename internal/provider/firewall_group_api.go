@@ -1,9 +1,7 @@
 package provider
 
-// Local CRUD methods for the v1 REST firewall group endpoint. These shadow
-// the promoted github.com/ubiquiti-community/go-unifi methods on *Client and
-// use the local internal/unifi types instead, removing the SDK dependency for
-// this resource — see issue #157.
+// CRUD methods for the v1 REST firewall group endpoint
+// (/api/s/{site}/rest/firewallgroup). v1 envelope; standard 200/204 statuses.
 
 import (
 	"context"

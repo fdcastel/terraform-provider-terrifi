@@ -1,6 +1,5 @@
-// Package unifi defines the local API contracts and error types used by the
-// Terrifi provider to talk to the UniFi controller. It replaces the upstream
-// github.com/ubiquiti-community/go-unifi SDK incrementally — see issue #157.
+// Package unifi defines the API contracts and error types used by the
+// Terrifi provider to talk to the UniFi controller.
 package unifi
 
 // NotFoundError is returned by Client read methods when the requested resource
