@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           start=$(date +%s)
-          sudo testing/install-uos-server.sh
+          sudo bash testing/install-uos-server.sh
           echo "::notice title=Phase timing::install took $(( $(date +%s) - start ))s"
 
       - name: Verify service is active
@@ -74,7 +74,7 @@ jobs:
           set -euo pipefail
           start=$(date +%s)
           # Capture the UNIFI_* output but do not export it anywhere (no tests run).
-          out=$(sudo testing/bootstrap.sh)
+          out=$(sudo bash testing/bootstrap.sh)
           echo "$out" | sed 's/UNIFI_API_KEY=.*/UNIFI_API_KEY=***redacted***/'
           echo "$out" | grep -q '^UNIFI_API_KEY=' || { echo "ERROR: bootstrap produced no API key"; exit 1; }
           echo "::notice title=Phase timing::bootstrap took $(( $(date +%s) - start ))s"
