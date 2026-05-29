@@ -41,22 +41,29 @@ jobs:
           echo "slirp4netns: $(slirp4netns --version | head -1)"
           echo "::notice title=Phase timing::prereqs took $(( $(date +%s) - start ))s"
 
-      - name: Make runner home config traversable for rootless podman
+      - name: Prime runner container config for UOS's rootless podman
         timeout-minutes: 1
         run: |
           set -euo pipefail
           # The UOS installer derives the "invoking user" from the runner's
-          # loginuid (immutable, = runner) regardless of SUDO_USER/HOME, and
-          # its image-load step runs podman pointed at
-          # /home/runner/.config/containers/storage.conf. That path lives under
-          # a 0700 home the uosserver service user cannot traverse, so the load
-          # dies with "stat ... permission denied". Open up just the container
-          # config path (read+traverse) and drop a minimal storage.conf so the
-          # stat succeeds and podman falls back to its compiled storage default.
+          # loginuid (immutable, = runner) regardless of SUDO_USER/HOME, so its
+          # image-load podman reads config from /home/runner/.config/containers
+          # rather than the uosserver user's home. Two consequences to patch:
+          #
+          #  1. storage.conf stat fails ("permission denied") because the path
+          #     sits under a 0700 home the uosserver service user can't
+          #     traverse. Open read+traverse and drop a minimal storage.conf.
+          #
+          #  2. Without UOS's containers.conf here, podman falls back to the
+          #     runner's *system* /usr/bin/pasta (an old version that rejects
+          #     UOS's --map-host-loopback args and dies printing usage). UOS
+          #     ships a newer bundled pasta at /var/lib/uosserver/bin (laid down
+          #     before the image-load step), so point helper_binaries_dir there.
           sudo mkdir -p /home/runner/.config/containers
           printf '[storage]\ndriver = "overlay"\n' | sudo tee /home/runner/.config/containers/storage.conf >/dev/null
+          printf '[engine]\nhelper_binaries_dir = ["/var/lib/uosserver/bin"]\n' | sudo tee /home/runner/.config/containers/containers.conf >/dev/null
           sudo chmod a+rx /home/runner /home/runner/.config /home/runner/.config/containers
-          sudo chmod a+r /home/runner/.config/containers/storage.conf
+          sudo chmod a+r /home/runner/.config/containers/storage.conf /home/runner/.config/containers/containers.conf
 
       - name: Install UOS Server (pinned 5.1.15)
         timeout-minutes: 12
