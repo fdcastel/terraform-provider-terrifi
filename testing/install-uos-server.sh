@@ -32,16 +32,21 @@ log() { printf >&2 '[install-uos-server] %s\n' "$*"; }
 [ "$(id -u)" = "0" ] || { log "ERROR: must run as root"; exit 1; }
 
 # Normalize the environment to "running directly as root". The Ubiquiti
-# installer keys its rootless-podman config path off $SUDO_USER and
-# $XDG_CONFIG_HOME: when invoked via `sudo` from a non-root login (e.g.
-# `sudo bash install-uos-server.sh` on a GitHub runner as the `runner`
-# user), the installer's image-load step reads
-# /home/$SUDO_USER/.config/containers/storage.conf and fails with
-# "permission denied" / "Broken pipe". Stripping SUDO_USER/UID/GID and
-# pinning HOME + XDG_CONFIG_HOME to root's makes the install behave the
-# same as a bare-root invocation (which is how it worked on the dev host).
+# installer keys its rootless-podman config path off the invoking user,
+# which it derives from SUDO_USER and (as a fallback) LOGNAME/USER. When
+# invoked via `sudo` from a non-root login (e.g. `sudo bash
+# install-uos-server.sh` on a GitHub runner as the `runner` user), the
+# installer's image-load step reads
+# /home/<that-user>/.config/containers/storage.conf and fails with
+# "permission denied" / "Broken pipe" (the uosserver user can't read
+# another user's 0700 home). Pinning every "who am I" signal to root makes
+# the install behave like a bare-root invocation, which is how it works on
+# the dev host (pct exec runs as root with no login session). Confirmed via
+# `grep -a` on the installer ELF that it references SUDO_USER and LOGNAME.
 unset SUDO_USER SUDO_UID SUDO_GID
 export HOME=/root
+export USER=root
+export LOGNAME=root
 export XDG_CONFIG_HOME=/root/.config
 
 # Skip if the target version is already installed.
