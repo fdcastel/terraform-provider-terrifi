@@ -257,7 +257,7 @@ func (r *networkResource) Update(
 		return
 	}
 
-	r.applyPlanToState(&plan, &state)
+	applyPlanToState(&plan, &state)
 
 	site := r.client.SiteOrDefault(state.Site)
 	network := r.modelToAPI(ctx, &state)
@@ -358,39 +358,6 @@ func (r *networkResource) ModifyPlan(
 // ---------------------------------------------------------------------------
 // Helper methods
 // ---------------------------------------------------------------------------
-
-func (r *networkResource) applyPlanToState(plan, state *networkResourceModel) {
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = plan.Name
-	}
-	if !plan.VLANId.IsNull() && !plan.VLANId.IsUnknown() {
-		state.VLANId = plan.VLANId
-	}
-	if !plan.Subnet.IsNull() && !plan.Subnet.IsUnknown() {
-		state.Subnet = plan.Subnet
-	}
-	if !plan.NetworkGroup.IsNull() && !plan.NetworkGroup.IsUnknown() {
-		state.NetworkGroup = plan.NetworkGroup
-	}
-	if !plan.DHCPEnabled.IsNull() && !plan.DHCPEnabled.IsUnknown() {
-		state.DHCPEnabled = plan.DHCPEnabled
-	}
-	if !plan.DHCPStart.IsNull() && !plan.DHCPStart.IsUnknown() {
-		state.DHCPStart = plan.DHCPStart
-	}
-	if !plan.DHCPStop.IsNull() && !plan.DHCPStop.IsUnknown() {
-		state.DHCPStop = plan.DHCPStop
-	}
-	if !plan.DHCPLease.IsNull() && !plan.DHCPLease.IsUnknown() {
-		state.DHCPLease = plan.DHCPLease
-	}
-	if !plan.DHCPDns.IsNull() && !plan.DHCPDns.IsUnknown() {
-		state.DHCPDns = plan.DHCPDns
-	}
-	if !plan.InternetAccessEnabled.IsNull() && !plan.InternetAccessEnabled.IsUnknown() {
-		state.InternetAccessEnabled = plan.InternetAccessEnabled
-	}
-}
 
 func (r *networkResource) modelToAPI(ctx context.Context, m *networkResourceModel) *unifi.Network {
 	net := &unifi.Network{

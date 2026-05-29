@@ -153,7 +153,6 @@ func TestFirewallZoneAPIToModel(t *testing.T) {
 }
 
 func TestFirewallZoneApplyPlanToState(t *testing.T) {
-	r := &firewallZoneResource{}
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
 		state := &firewallZoneResourceModel{
@@ -168,7 +167,7 @@ func TestFirewallZoneApplyPlanToState(t *testing.T) {
 			NetworkIDs: types.SetNull(types.StringType),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "New Zone", state.Name.ValueString())
 		// NetworkIDs is null in plan, so state should be preserved
@@ -191,7 +190,7 @@ func TestFirewallZoneApplyPlanToState(t *testing.T) {
 			}),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "New Zone", state.Name.ValueString())
 		assert.Equal(t, 2, len(state.NetworkIDs.Elements()))

@@ -244,7 +244,6 @@ func TestNetworkAPIToModel(t *testing.T) {
 }
 
 func TestNetworkApplyPlanToState(t *testing.T) {
-	r := &networkResource{}
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
 		state := &networkResourceModel{
@@ -265,7 +264,7 @@ func TestNetworkApplyPlanToState(t *testing.T) {
 			Subnet:      types.StringNull(),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "Updated Network", state.Name.ValueString())
 		assert.False(t, state.DHCPEnabled.ValueBool())

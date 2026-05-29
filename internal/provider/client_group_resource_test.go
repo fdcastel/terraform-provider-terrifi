@@ -67,7 +67,6 @@ func TestClientGroupAPIToModel(t *testing.T) {
 }
 
 func TestClientGroupApplyPlanToState(t *testing.T) {
-	r := &clientGroupResource{}
 
 	t.Run("name update", func(t *testing.T) {
 		state := &clientGroupResourceModel{
@@ -78,7 +77,7 @@ func TestClientGroupApplyPlanToState(t *testing.T) {
 			Name: types.StringValue("Updated"),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "Updated", state.Name.ValueString())
 	})
@@ -92,7 +91,7 @@ func TestClientGroupApplyPlanToState(t *testing.T) {
 			Name: types.StringNull(),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "Original", state.Name.ValueString())
 	})
@@ -106,7 +105,7 @@ func TestClientGroupApplyPlanToState(t *testing.T) {
 			Name: types.StringUnknown(),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "Original", state.Name.ValueString())
 	})

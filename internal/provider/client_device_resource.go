@@ -496,6 +496,11 @@ func (r *clientDeviceResource) syncFingerprintOverride(ctx context.Context, site
 	return r.client.SetFingerprintOverride(ctx, site, mac, 0)
 }
 
+// applyPlanToState is bespoke (not the generic applyPlanToState helper in
+// apply_plan.go) because it clears (sets to null) fields the user removed,
+// rather than leaving the prior state value. The client_device endpoint must
+// receive an authoritative empty value when a field is dropped; the generic
+// copy-if-set helper would skip the now-null field and resend the stale value.
 func (r *clientDeviceResource) applyPlanToState(plan, state *clientDeviceResourceModel) {
 	if !plan.MAC.IsNull() && !plan.MAC.IsUnknown() {
 		state.MAC = plan.MAC

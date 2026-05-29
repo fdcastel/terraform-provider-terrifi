@@ -204,7 +204,7 @@ func (r *firewallGroupResource) Update(
 		return
 	}
 
-	r.applyPlanToState(&plan, &state)
+	applyPlanToState(&plan, &state)
 
 	site := r.client.SiteOrDefault(state.Site)
 	group, diags := r.modelToAPI(ctx, &state)
@@ -265,19 +265,6 @@ func (r *firewallGroupResource) ImportState(
 // ---------------------------------------------------------------------------
 // Helper methods
 // ---------------------------------------------------------------------------
-
-// applyPlanToState merges the user's planned changes into the current state.
-func (r *firewallGroupResource) applyPlanToState(plan, state *firewallGroupResourceModel) {
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = plan.Name
-	}
-	if !plan.Type.IsNull() && !plan.Type.IsUnknown() {
-		state.Type = plan.Type
-	}
-	if !plan.Members.IsNull() && !plan.Members.IsUnknown() {
-		state.Members = plan.Members
-	}
-}
 
 // modelToAPI converts our Terraform model to the go-unifi FirewallGroup struct.
 func (r *firewallGroupResource) modelToAPI(ctx context.Context, m *firewallGroupResourceModel) (*unifi.FirewallGroup, diag.Diagnostics) {

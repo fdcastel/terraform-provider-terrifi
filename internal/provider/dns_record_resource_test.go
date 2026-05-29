@@ -150,7 +150,6 @@ func TestDNSRecordAPIToModel(t *testing.T) {
 // When a user changes some fields, applyPlanToState should update those fields
 // in state while leaving unchanged fields (null/unknown in the plan) alone.
 func TestDNSRecordApplyPlanToState(t *testing.T) {
-	r := &dnsRecordResource{}
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
 		state := &dnsRecordResourceModel{
@@ -170,7 +169,7 @@ func TestDNSRecordApplyPlanToState(t *testing.T) {
 			TTL:        types.Int64Null(),  // not in plan
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		// Changed field should be updated.
 		assert.Equal(t, "192.168.1.200", state.Value.ValueString())
@@ -194,7 +193,7 @@ func TestDNSRecordApplyPlanToState(t *testing.T) {
 			RecordType: types.StringValue("CNAME"),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "new.home", state.Name.ValueString())
 		assert.Equal(t, "10.0.0.2", state.Value.ValueString())

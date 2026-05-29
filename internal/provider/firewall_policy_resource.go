@@ -525,6 +525,13 @@ func (r *firewallPolicyResource) ModifyPlan(
 // Helper methods
 // ---------------------------------------------------------------------------
 
+// applyPlanToState is bespoke (not the generic applyPlanToState helper in
+// apply_plan.go) because optional-only fields here use copy-if-known
+// (propagate null), not copy-if-set: a user removing an optional field must
+// clear it so the API doesn't echo the stale value back and trigger a
+// "provider produced inconsistent result" error. The per-field comments below
+// mark which fields need that treatment. The generic copy-if-set helper would
+// regress those.
 func (r *firewallPolicyResource) applyPlanToState(plan, state *firewallPolicyResourceModel) {
 	if !plan.Name.IsUnknown() {
 		state.Name = plan.Name

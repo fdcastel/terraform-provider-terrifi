@@ -405,6 +405,11 @@ func (r *wlanResource) lookupDefaultAPGroup(ctx context.Context, site string) (s
 	return groups[0].ID, nil
 }
 
+// applyPlanToState is bespoke (not the generic applyPlanToState helper in
+// apply_plan.go) because `passphrase` must be copied even when the plan value
+// is null — switching a WLAN from wpapsk to open yields a null passphrase that
+// has to clear the stored secret. The generic copy-if-set helper skips null
+// fields and would leave the old passphrase in state.
 func (r *wlanResource) applyPlanToState(plan, state *wlanResourceModel) {
 	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
 		state.Name = plan.Name

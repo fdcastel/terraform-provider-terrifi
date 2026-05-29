@@ -139,7 +139,6 @@ func TestFirewallGroupAPIToModel(t *testing.T) {
 }
 
 func TestFirewallGroupApplyPlanToState(t *testing.T) {
-	r := &firewallGroupResource{}
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
 		state := &firewallGroupResourceModel{
@@ -156,7 +155,7 @@ func TestFirewallGroupApplyPlanToState(t *testing.T) {
 			Members: types.SetNull(types.StringType),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "New Name", state.Name.ValueString())
 		assert.Equal(t, "port-group", state.Type.ValueString())
@@ -181,7 +180,7 @@ func TestFirewallGroupApplyPlanToState(t *testing.T) {
 			}),
 		}
 
-		r.applyPlanToState(plan, state)
+		applyPlanToState(plan, state)
 
 		assert.Equal(t, "New Name", state.Name.ValueString())
 		assert.Equal(t, "address-group", state.Type.ValueString())

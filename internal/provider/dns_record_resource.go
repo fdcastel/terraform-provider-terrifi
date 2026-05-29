@@ -293,7 +293,7 @@ func (r *dnsRecordResource) Update(
 		return
 	}
 
-	r.applyPlanToState(&plan, &state)
+	applyPlanToState(&plan, &state)
 
 	site := r.client.SiteOrDefault(state.Site)
 	record := r.modelToAPI(&state)
@@ -354,40 +354,6 @@ func (r *dnsRecordResource) ImportState(
 // ---------------------------------------------------------------------------
 // Helper methods
 // ---------------------------------------------------------------------------
-
-// applyPlanToState merges the user's planned changes into the current state.
-// For each field, if the plan has a concrete value (not null, not unknown), we
-// copy it to state. Otherwise we keep the existing state value.
-//
-// This is necessary because the UniFi API returns complete objects, and some fields
-// may be set by the API that the user didn't specify. We don't want to accidentally
-// send zero values for those fields on update.
-func (r *dnsRecordResource) applyPlanToState(plan, state *dnsRecordResourceModel) {
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = plan.Name
-	}
-	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
-		state.Enabled = plan.Enabled
-	}
-	if !plan.Port.IsNull() && !plan.Port.IsUnknown() {
-		state.Port = plan.Port
-	}
-	if !plan.Priority.IsNull() && !plan.Priority.IsUnknown() {
-		state.Priority = plan.Priority
-	}
-	if !plan.RecordType.IsNull() && !plan.RecordType.IsUnknown() {
-		state.RecordType = plan.RecordType
-	}
-	if !plan.TTL.IsNull() && !plan.TTL.IsUnknown() {
-		state.TTL = plan.TTL
-	}
-	if !plan.Value.IsNull() && !plan.Value.IsUnknown() {
-		state.Value = plan.Value
-	}
-	if !plan.Weight.IsNull() && !plan.Weight.IsUnknown() {
-		state.Weight = plan.Weight
-	}
-}
 
 // modelToAPI converts our Terraform model to the go-unifi DNSRecord struct.
 // The go-unifi SDK uses plain Go types (string, bool, int64) and pointers,

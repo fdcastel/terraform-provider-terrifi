@@ -184,7 +184,7 @@ func (r *firewallZoneResource) Update(
 		return
 	}
 
-	r.applyPlanToState(&plan, &state)
+	applyPlanToState(&plan, &state)
 
 	site := r.client.SiteOrDefault(state.Site)
 	zone := r.modelToAPI(ctx, &state)
@@ -257,15 +257,6 @@ func (r *firewallZoneResource) ImportState(
 // ---------------------------------------------------------------------------
 // Helper methods
 // ---------------------------------------------------------------------------
-
-func (r *firewallZoneResource) applyPlanToState(plan, state *firewallZoneResourceModel) {
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = plan.Name
-	}
-	if !plan.NetworkIDs.IsNull() && !plan.NetworkIDs.IsUnknown() {
-		state.NetworkIDs = plan.NetworkIDs
-	}
-}
 
 // networkIDsMatch reports whether two network ID slices contain the same elements
 // (order-independent). Both nil and empty are treated as equivalent.

@@ -176,7 +176,7 @@ func (r *clientGroupResource) Update(
 		return
 	}
 
-	r.applyPlanToState(&plan, &state)
+	applyPlanToState(&plan, &state)
 
 	site := r.client.SiteOrDefault(state.Site)
 	group := r.modelToAPI(&state)
@@ -244,12 +244,6 @@ func (r *clientGroupResource) ImportState(
 // ---------------------------------------------------------------------------
 // Helper methods
 // ---------------------------------------------------------------------------
-
-func (r *clientGroupResource) applyPlanToState(plan, state *clientGroupResourceModel) {
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = plan.Name
-	}
-}
 
 func (r *clientGroupResource) modelToAPI(m *clientGroupResourceModel) *unifi.NetworkMembersGroup {
 	// Members are managed on the client device side via network_members_group_ids.
