@@ -46,7 +46,12 @@ jobs:
         run: |
           set -euo pipefail
           start=$(date +%s)
-          sudo bash testing/install-uos-server.sh
+          # -H forces HOME=/root. Without it, GitHub's sudoers keeps
+          # HOME=/home/runner, and the installer's internal podman image-load
+          # then reads /home/runner/.config/containers/storage.conf and fails
+          # with "permission denied". (The Proxmox spike worked because
+          # pct exec already runs with HOME=/root.)
+          sudo -H bash testing/install-uos-server.sh
           echo "::notice title=Phase timing::install took $(( $(date +%s) - start ))s"
 
       - name: Verify service is active
@@ -74,7 +79,8 @@ jobs:
           set -euo pipefail
           start=$(date +%s)
           # Capture the UNIFI_* output but do not export it anywhere (no tests run).
-          out=$(sudo bash testing/bootstrap.sh)
+          # -H for the same HOME=/root reason as the install step.
+          out=$(sudo -H bash testing/bootstrap.sh)
           echo "$out" | sed 's/UNIFI_API_KEY=.*/UNIFI_API_KEY=***redacted***/'
           echo "$out" | grep -q '^UNIFI_API_KEY=' || { echo "ERROR: bootstrap produced no API key"; exit 1; }
           echo "::notice title=Phase timing::bootstrap took $(( $(date +%s) - start ))s"
