@@ -99,19 +99,22 @@ CSRF=$(printf '%s' "$PAYLOAD" | base64 -d 2>/dev/null | jq -r .csrfToken)
 
 expected=$(( NUM_UGW + NUM_USW + NUM_UAP ))
 
+# Synthesis can take 2–4 minutes when the Network app starts on a freshly
+# wiped data volume (post-reset-controller.sh); a warm restart populates
+# the device list within ~30s. Use a generous deadline to cover both.
 log "polling for $expected synthetic devices"
-deadline=$(( $(date +%s) + 60 ))
+deadline=$(( $(date +%s) + 240 ))
 count=0
 while :; do
   count=$(curl -fsSk -b "$COOKIE" "$UOS_URL/proxy/network/api/s/default/stat/device" \
           | jq '.data | length' 2>/dev/null || echo 0)
   [ "$count" -ge "$expected" ] && break
   [ "$(date +%s)" -lt "$deadline" ] || break
-  sleep 2
+  sleep 3
 done
 
 if [ "$count" -lt "$expected" ]; then
-  log "ERROR: expected $expected devices, got $count after 60 s"
+  log "ERROR: expected $expected devices, got $count after 4 min"
   printf 'UNIFI_FAKE_DEVICES=%d\n' "$count"
   exit 1
 fi
@@ -127,19 +130,20 @@ for mac in $(jq -r '.data[] | select(.adopted | not) | .mac' /tmp/.dev.$$); do
   log "adopt $mac -> HTTP $http"
 done
 
-# Poll until every device is reported as adopted. Simulation devices step
-# through state 2 (pending) → state 1 (connected) at varying rates; some can
-# take 30+ s to reach state 1 even after the adopt command returns 200.
-log "waiting for all $count devices to settle into adopted=true"
-deadline=$(( $(date +%s) + 90 ))
+# Poll until every device is BOTH adopted=true AND state=1 (Connected).
+# The UGW in particular stays in state=7 (Adopting) for a while after its
+# adopt-cmd returns 200; until it reaches state=1 the controller has not
+# provisioned its config and has not created the default firewall zones
+# (Internal, External, DMZ, Hotspot, IoT, VPN), which blocks every
+# firewall-zone and firewall-policy test that follows.
+log "waiting for all $count devices to settle into adopted=true AND state=1 (Connected)"
+deadline=$(( $(date +%s) + 240 ))
 while :; do
-  all_adopted=$(curl -fsSk -b "$COOKIE" "$UOS_URL/proxy/network/api/s/default/stat/device" \
-                | jq '[.data[] | .adopted] | all')
-  pending=$(curl -fsSk -b "$COOKIE" "$UOS_URL/proxy/network/api/s/default/stat/device" \
-            | jq '[.data[] | select(.adopted | not)] | length')
-  [ "$all_adopted" = "true" ] && break
+  not_ready=$(curl -fsSk -b "$COOKIE" "$UOS_URL/proxy/network/api/s/default/stat/device" \
+              | jq '[.data[] | select((.adopted | not) or (.state != 1))] | length')
+  [ "$not_ready" = "0" ] && break
   if [ "$(date +%s)" -ge "$deadline" ]; then
-    log "WARN: $pending device(s) still unadopted after 90 s — re-issuing adopt"
+    log "WARN: $not_ready device(s) still not adopted+state=1 after 4 min — re-issuing adopt for unadopted ones"
     curl -fsSk -b "$COOKIE" "$UOS_URL/proxy/network/api/s/default/stat/device" \
       | jq -r '.data[] | select(.adopted | not) | .mac' \
       | while read mac; do
@@ -148,11 +152,34 @@ while :; do
             -d "$(jq -nc --arg m "$mac" '{cmd:"adopt",mac:$m}')" \
             "$UOS_URL/proxy/network/api/s/default/cmd/devmgr"
         done >&2
-    deadline=$(( $(date +%s) + 60 ))
+    deadline=$(( $(date +%s) + 120 ))
     continue
   fi
   sleep 3
 done
-log "all $count devices adopted"
+log "all $count devices adopted and in Connected state"
+
+# Now wait for the controller to seed the default firewall zones. Even after
+# the UGW reaches state=1, the controller-side seeder takes another moment
+# to populate Internal/External/DMZ/Hotspot/IoT/VPN. Poll until at least one
+# zone with zone_key=Hotspot exists — that's the parent reference downstream
+# user zones implicitly depend on.
+log "waiting for default firewall zones (Internal, External, DMZ, Hotspot, IoT, VPN)"
+deadline=$(( $(date +%s) + 120 ))
+while :; do
+  hotspot_count=$(curl -fsSk -b "$COOKIE" \
+                  "$UOS_URL/proxy/network/v2/api/site/default/firewall/zone" \
+                  | jq '[.[] | select(.zone_key == "Hotspot")] | length' 2>/dev/null || echo 0)
+  [ "$hotspot_count" -ge 1 ] && break
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    log "WARN: default firewall zones not seeded after 2 min — firewall tests will likely fail"
+    break
+  fi
+  sleep 3
+done
+zone_count=$(curl -fsSk -b "$COOKIE" \
+             "$UOS_URL/proxy/network/v2/api/site/default/firewall/zone" \
+             | jq 'length' 2>/dev/null || echo 0)
+log "controller has $zone_count default firewall zone(s)"
 
 printf 'UNIFI_FAKE_DEVICES=%d\n' "$count"
