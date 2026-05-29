@@ -6,10 +6,17 @@ is Ubiquiti's first-party packaging of the Network application; using it
 exercises code paths the docker simulation (`linuxserver/unifi-network-application`)
 does not, particularly around firewall zones/policies, WLAN, and client groups.
 
-The scripts are designed to run **as root on a Linux host where uosserver is
-already installed** (LXC, VM, or bare metal). They do not provision the host
-itself or install UOS Server; that step is out of scope here (typically a
-GitHub Actions step or a one-off `pveam` template + `pct create`).
+The scripts are designed to run **as root on a Linux host you control** — a
+Proxmox LXC, a VM, or bare metal. `install-uos-server.sh` provisions UOS
+Server itself (version-pinned); the others bootstrap it and drive the test
+target.
+
+> **This is a local / self-hosted target, not github-hosted CI.** See
+> "Why not github-hosted runners?" below — the UOS installer is built for a
+> bare-root host and does not run cleanly on github-hosted `ubuntu-24.04`
+> runners. The `docker` target remains the community-runnable CI fast path;
+> `uos` is for running the full hardware-gated suite against a real Network
+> application on a host you own.
 
 ## Scripts
 
@@ -39,11 +46,15 @@ GitHub Actions step or a one-off `pveam` template + `pct create`).
 ## Typical use
 
 ```sh
-# Once per host, after UOS Server is installed:
+# 1. Install UOS Server (pinned version, SHA256-verified). Idempotent.
+sudo bash testing/install-uos-server.sh
+
+# 2. Bootstrap admin + API key, and adopt simulated devices. Prints the
+#    UNIFI_* env vars on stdout; eval them into the current shell.
 eval "$(ENABLE_FAKE_DEVICES=1 sudo testing/bootstrap.sh)"
 
-# Then on the test runner (which can be the same host or a different one
-# that can reach UOS over the network):
+# 3. Run the acceptance suite against UOS (same host, or any host that can
+#    reach UOS over the network — just carry the UNIFI_* vars across).
 export UNIFI_SITE=default
 task test:acc:uos
 ```
@@ -73,9 +84,42 @@ pct delsnapshot <VMID> clean     # only after the new one is proven
 pct snapshot <VMID> clean
 ```
 
-The CI workflow (§8 L05) will not use snapshots — it installs UOS fresh on
-each run via `bootstrap.sh`. The local dev loop is the only place this
-matters.
+Snapshots are a local-dev convenience only; they are not part of any CI
+flow (there is no github-hosted UOS CI — see below).
+
+## Why not github-hosted runners?
+
+We investigated running this target on github-hosted `ubuntu-24.04`
+runners (a `ci-uos-probe.yaml` workflow, 8 dispatched runs) and concluded
+it is not viable without owning the runner. The UOS installer is built for
+a bare-root host and derives the "invoking user" from the audit loginuid /
+cwd owner — which on a github-hosted runner is the non-root `runner`
+account, and is immutable under `sudo` and unaffected by
+`systemd-run --scope`. Its rootless-podman steps then target
+`/home/runner/.config/<subsystem>`, a 0700 home the `uosserver` service
+user can neither traverse nor write. Five layered workarounds each cleared
+one subsystem and surfaced the next:
+
+1. scripts must be executable (`git update-index --chmod=+x`) or invoked
+   as `sudo bash <script>`;
+2. `sudo` keeps `HOME=/home/runner` → `sudo -H`;
+3. installer reads `SUDO_USER`/`LOGNAME` → pin both to root;
+4. `storage.conf` stat denied under runner's 0700 home → pre-seed a
+   traversable config dir;
+5. podman picks the runner's stale system `/usr/bin/pasta` over UOS's
+   bundled v2026 → set `helper_binaries_dir`.
+
+…and the loginuid-driven `/home/runner/<subsystem>` writes (cni, …) never
+stopped. The viable CI paths, if github-hosted-fresh-install is ruled out:
+
+- a **self-hosted runner running as real root** (mirrors the existing
+  `ci-hil.yaml` setup) — no `runner`-user conflict;
+- a **pre-baked UOS VM image / snapshot** the workflow boots instead of
+  installing fresh.
+
+Until one of those exists, `uos` is a **local / self-hosted target**: run
+the steps in "Typical use" on a host you control. The `docker` target
+(`task test:acc`) remains the github-hosted community CI path.
 
 ## Known limitation: firewall zones require real adopted hardware
 
