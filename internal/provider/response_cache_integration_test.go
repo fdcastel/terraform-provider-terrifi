@@ -12,8 +12,6 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	sdkunifi "github.com/ubiquiti-community/go-unifi/unifi"
-
 	"github.com/alexklibisz/terrifi/internal/unifi"
 )
 
@@ -319,9 +317,9 @@ func TestResponseCaching_V1RequestsCachedThroughDoV2(t *testing.T) {
 
 	clientResp := struct {
 		Meta json.RawMessage `json:"meta"`
-		Data []sdkunifi.Client  `json:"data"`
+		Data []unifi.Client  `json:"data"`
 	}{
-		Data: []sdkunifi.Client{
+		Data: []unifi.Client{
 			{ID: "client-1", MAC: "aa:bb:cc:dd:ee:ff", Name: "Test Client"},
 		},
 	}
