@@ -13,21 +13,23 @@
 # gated behind a toggle because they need an adopted gateway (see that file).
 # Resources terrifi does not implement yet are catalogued in stubs.tf.
 
-terraform {
-  required_providers {
-    terrifi = {
-      source = "alexklibisz/terrifi"
-    }
-  }
-}
-
-# Provider configuration comes from environment variables
-# (UNIFI_API, UNIFI_API_KEY or UNIFI_USERNAME/PASSWORD, UNIFI_INSECURE). No
-# explicit `provider "terrifi" {}` block: the empty block is redundant under
-# env-var config, and omitting it lets the acceptance-test harness
-# (TestAccCompleteNetwork_basic) inject the in-process provider without a
-# "providers must only be specified at the TestCase or TestStep level"
-# conflict. Add one here only if you need to set api_url/username inline.
+# NOTE: this directory is consumed by the TestAccCompleteNetwork_basic
+# acceptance test (improvement-plan §8 L07), which applies it via
+# ConfigDirectory and injects the provider in-process. terraform-plugin-testing
+# requires that a test-applied config NOT declare providers itself, so there is
+# deliberately no `terraform { required_providers {} }` or `provider "terrifi"`
+# block here. Provider config comes from UNIFI_* env vars.
+#
+# To run this example by hand against a registry build, add a versions.tf:
+#
+#   terraform {
+#     required_providers {
+#       terrifi = { source = "alexklibisz/terrifi" }
+#     }
+#   }
+#
+# (Under the documented dev_overrides workflow you don't even need that — see
+# the repo README.) Then `terraform apply`.
 
 variable "wifi_passphrase" {
   type        = string

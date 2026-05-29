@@ -27,6 +27,21 @@ terraform apply -var=enable_zone_firewall=true
 Provider credentials come from the environment (`UNIFI_API`,
 `UNIFI_API_KEY` or `UNIFI_USERNAME`/`UNIFI_PASSWORD`, `UNIFI_INSECURE`).
 
+This directory is also the fixture for `TestAccCompleteNetwork_basic`, which
+applies it in-process. terraform-plugin-testing requires a test-applied
+config to declare no providers of its own, so — unlike the other examples —
+there is no `terraform { required_providers {} }` block here. Under the
+repo's `dev_overrides` workflow you don't need one. To run against a registry
+build, drop a `versions.tf` in this directory:
+
+```hcl
+terraform {
+  required_providers {
+    terrifi = { source = "alexklibisz/terrifi" }
+  }
+}
+```
+
 ## Why the zone-based firewall is gated off
 
 `terrifi_firewall_zone` / `_policy` / `_policy_order` require the controller
