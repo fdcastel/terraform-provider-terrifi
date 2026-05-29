@@ -40,7 +40,8 @@ if command -v uosserver >/dev/null 2>&1; then
   fi
   log "found existing UOS Server $current; will replace with $UOS_VERSION"
   log "running uosserver-purge to remove the existing install"
-  uosserver-purge --yes 2>&1 | tee -a "$LOG" || {
+  # uosserver-purge prompts y/N and has no flag to bypass; feed it `y` on stdin.
+  echo y | uosserver-purge 2>&1 | tee -a "$LOG" || {
     log "WARN: uosserver-purge returned non-zero; continuing"
   }
 fi
@@ -64,11 +65,12 @@ if [ "$actual" != "$UOS_SHA256" ]; then
   exit 1
 fi
 
-# Run the installer. Ubiquiti distributes a self-executing binary that runs
-# the install when invoked with bash; --non-interactive accepts the EULA.
+# Run the installer. Ubiquiti distributes a native ELF binary, not a shell
+# script — invoke it directly with chmod +x. Feed `y` on stdin to accept
+# any interactive prompts the installer might surface.
 log "running installer (this takes 2-3 minutes; output goes to $LOG)"
 chmod +x "$INSTALLER"
-bash "$INSTALLER" --non-interactive 2>&1 | tee -a "$LOG"
+yes y | "$INSTALLER" 2>&1 | tee -a "$LOG"
 
 # Confirm the service is up.
 log "waiting for uosserver.service to be active"
