@@ -32,12 +32,16 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		// Address is the provider's registry address. This tells Terraform how to map
-		// the "alexklibisz/terrifi" in a required_providers block to this binary.
-		// Format: <hostname>/<namespace>/<type>
-		// Even during local development with dev_overrides, this must match what's
-		// in the Terraform config's required_providers block.
-		Address: "registry.terraform.io/alexklibisz/terrifi",
+		// Address is the provider's registry address. This tells Terraform/OpenTofu
+		// how to map the "fdcastel/terrifi" in a required_providers block to this
+		// binary. Format: <hostname>/<namespace>/<type>.
+		//
+		// FORK NOTE: this is the unofficial fdcastel release lineage, published to
+		// the OpenTofu registry as registry.opentofu.org/fdcastel/terrifi. The
+		// namespace here must match the published namespace (and the `source` users
+		// write) to avoid provider-address mismatches. Upstream (alexklibisz) keeps
+		// its own address; this change lives only on the fdcastel-release branch.
+		Address: "registry.opentofu.org/fdcastel/terrifi",
 		Debug:   debug,
 	}
 
