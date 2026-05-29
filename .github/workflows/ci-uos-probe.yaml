@@ -2,13 +2,22 @@ name: CI - UOS Probe
 
 # Probe-only workflow (issue #157 / improvement-plan §8 L04). Proves that a
 # UniFi OS Server install + bootstrap survives on a github-hosted
-# ubuntu-24.04 runner. Does NOT run `go test` — that is L05's job, gated on
-# this probe being green several consecutive times.
+# ubuntu-24.04 runner. Does NOT run `go test` — that is L05's job.
 #
-# UOS Server viability on github VMs is the open question: the install +
-# bootstrap + simulation chain is validated locally on a Proxmox LXC
-# (UOS 5.1.15), but github runners differ in kernel, cgroup, and
-# rootless-podman support. This workflow answers "does it boot here?".
+# ┌─ STATUS: BLOCKED (do not rely on this passing yet) ───────────────────┐
+# │ The full install→bootstrap chain is validated locally on a Proxmox    │
+# │ LXC (UOS 5.1.15, 92/92 acceptance tests). On github-hosted runners    │
+# │ the UOS installer's rootless-podman steps resolve the invoking user   │
+# │ to the runner's `runner` account (via audit loginuid / cwd owner —    │
+# │ immutable under sudo, unaffected by `systemd-run --scope`) and target │
+# │ /home/runner/.config/<subsystem>, which the `uosserver` service user  │
+# │ cannot traverse or write. Five layered workarounds (exec bit, sudo    │
+# │ HOME, SUDO_USER/LOGNAME, storage.conf traversal, bundled-pasta        │
+# │ helper_binaries_dir) each cleared one subsystem and surfaced the      │
+# │ next (cni, …). The installer is built for a bare-root host and is not │
+# │ cleanly CI-compatible. Unblock paths: self-hosted root runner (like   │
+# │ ci-hil), a pre-baked UOS VM image, or keep `uos` a local-only target. │
+# └───────────────────────────────────────────────────────────────────────┘
 #
 # Trigger: workflow_dispatch only. Run it by hand from the Actions tab.
 
