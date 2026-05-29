@@ -70,12 +70,15 @@ jobs:
         run: |
           set -euo pipefail
           start=$(date +%s)
-          # -H forces HOME=/root. Without it, GitHub's sudoers keeps
-          # HOME=/home/runner, and the installer's internal podman image-load
-          # then reads /home/runner/.config/containers/storage.conf and fails
-          # with "permission denied". (The Proxmox spike worked because
-          # pct exec already runs with HOME=/root.)
-          sudo -H bash testing/install-uos-server.sh
+          # Run the installer inside a systemd transient scope. The installer
+          # resolves the "invoking user" from the audit loginuid, which is
+          # immutable (= runner) under a normal sudo session and makes its
+          # rootless-podman steps target /home/runner (root-owned, 0700 — the
+          # uosserver service user can neither traverse nor write it). A
+          # systemd-run --scope child is spawned by systemd (PID 1), so it
+          # inherits an *unset* loginuid and the installer resolves to root,
+          # using /root + /home/uosserver as on the dev host.
+          sudo systemd-run --scope --quiet --unit=uos-install bash testing/install-uos-server.sh
           echo "::notice title=Phase timing::install took $(( $(date +%s) - start ))s"
 
       - name: Verify service is active
