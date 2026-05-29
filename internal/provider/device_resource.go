@@ -400,7 +400,7 @@ func (r *deviceResource) Create(
 		return
 	}
 
-	// TODO(go-unifi): Bypass SDK's UpdateDevice — see device_api.go for details.
+	
 	err = r.client.UpdateDevice(ctx, site, existing.ID, &plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error Updating Device", err.Error())
@@ -467,7 +467,7 @@ func (r *deviceResource) Update(
 
 	site := r.client.SiteOrDefault(state.Site)
 
-	// TODO(go-unifi): Bypass SDK's UpdateDevice — see device_api.go for details.
+	
 	err := r.client.UpdateDevice(ctx, site, state.ID.ValueString(), &plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error Updating Device", err.Error())
