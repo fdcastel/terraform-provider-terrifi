@@ -1,0 +1,88 @@
+name: CI - UOS Probe
+
+# Probe-only workflow (issue #157 / improvement-plan §8 L04). Proves that a
+# UniFi OS Server install + bootstrap survives on a github-hosted
+# ubuntu-24.04 runner. Does NOT run `go test` — that is L05's job, gated on
+# this probe being green several consecutive times.
+#
+# UOS Server viability on github VMs is the open question: the install +
+# bootstrap + simulation chain is validated locally on a Proxmox LXC
+# (UOS 5.1.15), but github runners differ in kernel, cgroup, and
+# rootless-podman support. This workflow answers "does it boot here?".
+#
+# Trigger: workflow_dispatch only. Run it by hand from the Actions tab.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Probe UOS Server install + bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        timeout-minutes: 1
+        uses: actions/checkout@v4
+
+      - name: Install prerequisites (podman, slirp4netns, curl, jq)
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            podman slirp4netns curl jq ca-certificates
+          echo "podman: $(podman --version)"
+          echo "slirp4netns: $(slirp4netns --version | head -1)"
+          echo "::notice title=Phase timing::prereqs took $(( $(date +%s) - start ))s"
+
+      - name: Install UOS Server (pinned 5.1.15)
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          sudo testing/install-uos-server.sh
+          echo "::notice title=Phase timing::install took $(( $(date +%s) - start ))s"
+
+      - name: Verify service is active
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          systemctl is-active uosserver
+          echo "version: $(uosserver version 2>/dev/null | head -1)"
+
+      - name: Verify /api/system responds
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          deadline=$(( start + 120 ))
+          until curl -fsSk -o /dev/null -w '%{http_code}\n' https://127.0.0.1:11443/api/system; do
+            [ "$(date +%s)" -lt "$deadline" ] || { echo "ERROR: /api/system never returned 2xx"; exit 1; }
+            sleep 2
+          done
+          echo "::notice title=Phase timing::api-warmup took $(( $(date +%s) - start ))s"
+
+      - name: Run bootstrap.sh
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          # Capture the UNIFI_* output but do not export it anywhere (no tests run).
+          out=$(sudo testing/bootstrap.sh)
+          echo "$out" | sed 's/UNIFI_API_KEY=.*/UNIFI_API_KEY=***redacted***/'
+          echo "$out" | grep -q '^UNIFI_API_KEY=' || { echo "ERROR: bootstrap produced no API key"; exit 1; }
+          echo "::notice title=Phase timing::bootstrap took $(( $(date +%s) - start ))s"
+
+      - name: Dump uosserver journal on failure
+        if: failure()
+        run: |
+          echo "=== systemctl status ==="
+          systemctl status uosserver --no-pager || true
+          echo "=== journalctl (last 200 lines) ==="
+          sudo journalctl -u uosserver --no-pager -n 200 || true
