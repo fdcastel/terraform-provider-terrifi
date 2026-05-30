@@ -869,6 +869,8 @@ resource "terrifi_network" "test" {
 			},
 			{
 				// Drop all five back to defaults / null.
+				// multicast_dns falls back to the schema default (true) since the
+				// controller defaults it to true on corporate networks.
 				Config: fmt.Sprintf(`
 resource "terrifi_network" "test" {
   name         = %q
@@ -885,7 +887,7 @@ resource "terrifi_network" "test" {
 					resource.TestCheckNoResourceAttr("terrifi_network.test", "dhcp_boot_server"),
 					resource.TestCheckNoResourceAttr("terrifi_network.test", "dhcp_boot_filename"),
 					resource.TestCheckNoResourceAttr("terrifi_network.test", "domain_name"),
-					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "false"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "true"),
 				),
 			},
 		},

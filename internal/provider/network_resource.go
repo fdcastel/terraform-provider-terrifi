@@ -188,10 +188,10 @@ func (r *networkResource) Schema(
 			},
 
 			"multicast_dns": schema.BoolAttribute{
-				MarkdownDescription: "Whether the mDNS reflector (Bonjour/zeroconf) is enabled on this network. Default: `false`.",
+				MarkdownDescription: "Whether the mDNS reflector (Bonjour/zeroconf) is enabled on this network. Default: `true` (matches the controller's create-time default — set explicitly to `false` to disable).",
 				Optional:            true,
 				Computed:            true,
-				Default:             booldefault.StaticBool(false),
+				Default:             booldefault.StaticBool(true),
 			},
 
 			"internet_access_enabled": schema.BoolAttribute{
@@ -372,11 +372,12 @@ func (r *networkResource) ModifyPlan(
 	plan.DHCPLease = types.Int64Null()
 	plan.DHCPDns = types.ListNull(types.StringType)
 
-	// internet_access_enabled is not meaningful for vlan-only networks. Override
-	// the schema default (true) to false — but only when the user did not
-	// explicitly set the field in their config. If the user set it explicitly we
-	// must leave the plan value alone or Terraform will reject the plan with
-	// "planned value does not match config value".
+	// internet_access_enabled and multicast_dns are not meaningful for vlan-only
+	// networks. Override the schema defaults (both default to true on corporate)
+	// to false — but only when the user did not explicitly set the field in
+	// their config. If the user set it explicitly we must leave the plan value
+	// alone or Terraform will reject the plan with "planned value does not
+	// match config value".
 	var config networkResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
@@ -384,6 +385,9 @@ func (r *networkResource) ModifyPlan(
 	}
 	if config.InternetAccessEnabled.IsNull() {
 		plan.InternetAccessEnabled = types.BoolValue(false)
+	}
+	if config.MulticastDNS.IsNull() {
+		plan.MulticastDNS = types.BoolValue(false)
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
