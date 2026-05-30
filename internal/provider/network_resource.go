@@ -50,6 +50,11 @@ type networkResourceModel struct {
 	DHCPStop              types.String `tfsdk:"dhcp_stop"`
 	DHCPLease             types.Int64  `tfsdk:"dhcp_lease"`
 	DHCPDns               types.List   `tfsdk:"dhcp_dns"`
+	DHCPBootEnabled       types.Bool   `tfsdk:"dhcp_boot_enabled"`
+	DHCPBootServer        types.String `tfsdk:"dhcp_boot_server"`
+	DHCPBootFilename      types.String `tfsdk:"dhcp_boot_filename"`
+	DomainName            types.String `tfsdk:"domain_name"`
+	MulticastDNS          types.Bool   `tfsdk:"multicast_dns"`
 	InternetAccessEnabled types.Bool   `tfsdk:"internet_access_enabled"`
 }
 
@@ -158,6 +163,35 @@ func (r *networkResource) Schema(
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(4),
 				},
+			},
+
+			"dhcp_boot_enabled": schema.BoolAttribute{
+				MarkdownDescription: "Whether DHCP PXE/TFTP boot options (66/67) are emitted on leases. Default: `false`.",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+			},
+
+			"dhcp_boot_server": schema.StringAttribute{
+				MarkdownDescription: "DHCP option 66 — TFTP/PXE boot server IP. Only emitted when `dhcp_boot_enabled = true`.",
+				Optional:            true,
+			},
+
+			"dhcp_boot_filename": schema.StringAttribute{
+				MarkdownDescription: "DHCP option 67 — boot filename (e.g. `netboot.xyz.kpxe`). Only emitted when `dhcp_boot_enabled = true`.",
+				Optional:            true,
+			},
+
+			"domain_name": schema.StringAttribute{
+				MarkdownDescription: "Domain name published via DHCP option 15. Optional.",
+				Optional:            true,
+			},
+
+			"multicast_dns": schema.BoolAttribute{
+				MarkdownDescription: "Whether the mDNS reflector (Bonjour/zeroconf) is enabled on this network. Default: `false`.",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
 			},
 
 			"internet_access_enabled": schema.BoolAttribute{
@@ -446,6 +480,33 @@ func (r *networkResource) modelToAPI(ctx context.Context, m *networkResourceMode
 		if !m.InternetAccessEnabled.IsNull() {
 			net.InternetAccessEnabled = m.InternetAccessEnabled.ValueBool()
 		}
+
+		if !m.DHCPBootEnabled.IsNull() {
+			net.DHCPDBootEnabled = m.DHCPBootEnabled.ValueBool()
+		}
+
+		// dhcp_boot_server / dhcp_boot_filename: pointer + omitempty when null
+		// so the controller does not store empty strings. We do not gate this on
+		// dhcp_boot_enabled — the controller accepts the values either way and
+		// only emits them on the wire when dhcp_boot_enabled=true.
+		if !m.DHCPBootServer.IsNull() && !m.DHCPBootServer.IsUnknown() {
+			s := m.DHCPBootServer.ValueString()
+			net.DHCPDBootServer = &s
+		}
+
+		if !m.DHCPBootFilename.IsNull() && !m.DHCPBootFilename.IsUnknown() {
+			s := m.DHCPBootFilename.ValueString()
+			net.DHCPDBootFilename = &s
+		}
+
+		if !m.DomainName.IsNull() && !m.DomainName.IsUnknown() {
+			s := m.DomainName.ValueString()
+			net.DomainName = &s
+		}
+
+		if !m.MulticastDNS.IsNull() {
+			net.MdnsEnabled = m.MulticastDNS.ValueBool()
+		}
 	}
 
 	return net
@@ -532,6 +593,28 @@ func (r *networkResource) apiToModel(ctx context.Context, net *unifi.Network, m 
 		}
 
 		m.InternetAccessEnabled = types.BoolValue(net.InternetAccessEnabled)
+
+		m.DHCPBootEnabled = types.BoolValue(net.DHCPDBootEnabled)
+
+		if net.DHCPDBootServer != nil && *net.DHCPDBootServer != "" {
+			m.DHCPBootServer = types.StringPointerValue(net.DHCPDBootServer)
+		} else {
+			m.DHCPBootServer = types.StringNull()
+		}
+
+		if net.DHCPDBootFilename != nil && *net.DHCPDBootFilename != "" {
+			m.DHCPBootFilename = types.StringPointerValue(net.DHCPDBootFilename)
+		} else {
+			m.DHCPBootFilename = types.StringNull()
+		}
+
+		if net.DomainName != nil && *net.DomainName != "" {
+			m.DomainName = types.StringPointerValue(net.DomainName)
+		} else {
+			m.DomainName = types.StringNull()
+		}
+
+		m.MulticastDNS = types.BoolValue(net.MdnsEnabled)
 	} else {
 		// vlan-only: null out all IP/DHCP fields.
 		m.Subnet = types.StringNull()
@@ -544,6 +627,12 @@ func (r *networkResource) apiToModel(ctx context.Context, net *unifi.Network, m 
 		// Store false so it matches what ModifyPlan produces, avoiding a
 		// perpetual diff after import or refresh.
 		m.InternetAccessEnabled = types.BoolValue(false)
+		// PXE boot / domain_name / mdns are not meaningful for vlan-only either.
+		m.DHCPBootEnabled = types.BoolValue(false)
+		m.DHCPBootServer = types.StringNull()
+		m.DHCPBootFilename = types.StringNull()
+		m.DomainName = types.StringNull()
+		m.MulticastDNS = types.BoolValue(false)
 	}
 }
 

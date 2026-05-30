@@ -44,6 +44,20 @@ type Network struct {
 	DHCPDDNS3      string  `json:"dhcpd_dns_3"`
 	DHCPDDNS4      string  `json:"dhcpd_dns_4"`
 
+	// PXE / TFTP boot options (DHCP options 66 + 67). When DHCPDBootEnabled is
+	// true the controller emits dhcpd_boot_server (option 66) and
+	// dhcpd_boot_filename (option 67) on DHCP leases.
+	DHCPDBootEnabled  bool    `json:"dhcpd_boot_enabled"`
+	DHCPDBootServer   *string `json:"dhcpd_boot_server,omitempty"`
+	DHCPDBootFilename *string `json:"dhcpd_boot_filename,omitempty"`
+
+	// DomainName is the DHCP-published search domain (DHCP option 15).
+	DomainName *string `json:"domain_name,omitempty"`
+
+	// MdnsEnabled toggles the mDNS reflector (zeroconf/Bonjour cross-VLAN
+	// forwarding) on this network.
+	MdnsEnabled bool `json:"mdns_enabled"`
+
 	InternetAccessEnabled bool    `json:"internet_access_enabled"`
 	SettingPreference     *string `json:"setting_preference,omitempty"`
 }
