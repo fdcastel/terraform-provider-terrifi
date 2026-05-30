@@ -129,6 +129,99 @@ func TestNetworkModelToAPI(t *testing.T) {
 		assert.Equal(t, "9.9.9.9", net.DHCPDDNS3)
 		assert.Equal(t, "8.8.4.4", net.DHCPDDNS4)
 	})
+
+	t.Run("dhcp boot fields propagate when set", func(t *testing.T) {
+		model := &networkResourceModel{
+			Name:             types.StringValue("PXE Net"),
+			Purpose:          types.StringValue("corporate"),
+			DHCPBootEnabled:  types.BoolValue(true),
+			DHCPBootServer:   types.StringValue("192.168.10.221"),
+			DHCPBootFilename: types.StringValue("netboot.xyz.kpxe"),
+		}
+
+		net := r.modelToAPI(ctx, model)
+
+		assert.True(t, net.DHCPDBootEnabled)
+		require.NotNil(t, net.DHCPDBootServer)
+		assert.Equal(t, "192.168.10.221", *net.DHCPDBootServer)
+		require.NotNil(t, net.DHCPDBootFilename)
+		assert.Equal(t, "netboot.xyz.kpxe", *net.DHCPDBootFilename)
+	})
+
+	t.Run("dhcp boot null fields stay nil on the wire", func(t *testing.T) {
+		model := &networkResourceModel{
+			Name:             types.StringValue("No PXE"),
+			Purpose:          types.StringValue("corporate"),
+			DHCPBootEnabled:  types.BoolValue(false),
+			DHCPBootServer:   types.StringNull(),
+			DHCPBootFilename: types.StringNull(),
+		}
+
+		net := r.modelToAPI(ctx, model)
+
+		assert.False(t, net.DHCPDBootEnabled)
+		assert.Nil(t, net.DHCPDBootServer)
+		assert.Nil(t, net.DHCPDBootFilename)
+	})
+
+	t.Run("domain_name propagates when set, nil when null", func(t *testing.T) {
+		setModel := &networkResourceModel{
+			Name:       types.StringValue("With Domain"),
+			Purpose:    types.StringValue("corporate"),
+			DomainName: types.StringValue("poa.dalcastel.com"),
+		}
+		nullModel := &networkResourceModel{
+			Name:       types.StringValue("No Domain"),
+			Purpose:    types.StringValue("corporate"),
+			DomainName: types.StringNull(),
+		}
+
+		setNet := r.modelToAPI(ctx, setModel)
+		nullNet := r.modelToAPI(ctx, nullModel)
+
+		require.NotNil(t, setNet.DomainName)
+		assert.Equal(t, "poa.dalcastel.com", *setNet.DomainName)
+		assert.Nil(t, nullNet.DomainName)
+	})
+
+	t.Run("multicast_dns propagates both true and false", func(t *testing.T) {
+		on := &networkResourceModel{
+			Name:         types.StringValue("mDNS on"),
+			Purpose:      types.StringValue("corporate"),
+			MulticastDNS: types.BoolValue(true),
+		}
+		off := &networkResourceModel{
+			Name:         types.StringValue("mDNS off"),
+			Purpose:      types.StringValue("corporate"),
+			MulticastDNS: types.BoolValue(false),
+		}
+
+		assert.True(t, r.modelToAPI(ctx, on).MdnsEnabled)
+		assert.False(t, r.modelToAPI(ctx, off).MdnsEnabled)
+	})
+
+	t.Run("vlan-only network skips all new fields", func(t *testing.T) {
+		model := &networkResourceModel{
+			Name:             types.StringValue("VLAN-only"),
+			Purpose:          types.StringValue("vlan-only"),
+			VLANId:           types.Int64Value(50),
+			DHCPBootEnabled:  types.BoolValue(true),
+			DHCPBootServer:   types.StringValue("ignored"),
+			DHCPBootFilename: types.StringValue("ignored"),
+			DomainName:       types.StringValue("ignored.example"),
+			MulticastDNS:     types.BoolValue(true),
+		}
+
+		net := r.modelToAPI(ctx, model)
+
+		// vlan-only branch in modelToAPI never reaches the corporate-only fields,
+		// so the wire struct stays at zero values.
+		assert.False(t, net.DHCPDBootEnabled)
+		assert.Nil(t, net.DHCPDBootServer)
+		assert.Nil(t, net.DHCPDBootFilename)
+		assert.Nil(t, net.DomainName)
+		assert.False(t, net.MdnsEnabled)
+	})
 }
 
 func TestNetworkAPIToModel(t *testing.T) {
@@ -240,6 +333,152 @@ func TestNetworkAPIToModel(t *testing.T) {
 
 		assert.False(t, model.DHCPDns.IsNull())
 		assert.Equal(t, 2, len(model.DHCPDns.Elements()))
+	})
+
+	t.Run("corporate network with PXE boot fields", func(t *testing.T) {
+		name := "PXE Net"
+		bootServer := "192.168.10.221"
+		bootFilename := "netboot.xyz.kpxe"
+		net := &unifi.Network{
+			ID:                "boot1",
+			Purpose:           "corporate",
+			Name:              &name,
+			DHCPDEnabled:      true,
+			DHCPDBootEnabled:  true,
+			DHCPDBootServer:   &bootServer,
+			DHCPDBootFilename: &bootFilename,
+		}
+
+		var model networkResourceModel
+		r.apiToModel(ctx, net, &model, "default")
+
+		assert.True(t, model.DHCPBootEnabled.ValueBool())
+		assert.Equal(t, "192.168.10.221", model.DHCPBootServer.ValueString())
+		assert.Equal(t, "netboot.xyz.kpxe", model.DHCPBootFilename.ValueString())
+	})
+
+	t.Run("corporate network without PXE boot has null boot strings", func(t *testing.T) {
+		name := "No PXE"
+		net := &unifi.Network{
+			ID:               "nopxe1",
+			Purpose:          "corporate",
+			Name:             &name,
+			DHCPDBootEnabled: false,
+		}
+
+		var model networkResourceModel
+		r.apiToModel(ctx, net, &model, "default")
+
+		assert.False(t, model.DHCPBootEnabled.ValueBool())
+		assert.True(t, model.DHCPBootServer.IsNull())
+		assert.True(t, model.DHCPBootFilename.IsNull())
+	})
+
+	t.Run("controller-emitted empty strings on boot fields decode as null", func(t *testing.T) {
+		// The controller may store empty strings for unset boot fields. Treat
+		// them as null in state so they do not produce a perpetual diff against
+		// the schema's optional default (which is null).
+		name := "Empty Boot"
+		emptyServer := ""
+		emptyFilename := ""
+		net := &unifi.Network{
+			ID:                "empty1",
+			Purpose:           "corporate",
+			Name:              &name,
+			DHCPDBootEnabled:  false,
+			DHCPDBootServer:   &emptyServer,
+			DHCPDBootFilename: &emptyFilename,
+		}
+
+		var model networkResourceModel
+		r.apiToModel(ctx, net, &model, "default")
+
+		assert.True(t, model.DHCPBootServer.IsNull())
+		assert.True(t, model.DHCPBootFilename.IsNull())
+	})
+
+	t.Run("domain_name round-trips for corporate; null when controller omits or empties", func(t *testing.T) {
+		name := "Domain Net"
+		domain := "poa.dalcastel.com"
+		netSet := &unifi.Network{
+			ID:         "d1",
+			Purpose:    "corporate",
+			Name:       &name,
+			DomainName: &domain,
+		}
+		empty := ""
+		netEmpty := &unifi.Network{
+			ID:         "d2",
+			Purpose:    "corporate",
+			Name:       &name,
+			DomainName: &empty,
+		}
+		netUnset := &unifi.Network{
+			ID:      "d3",
+			Purpose: "corporate",
+			Name:    &name,
+		}
+
+		var mSet, mEmpty, mUnset networkResourceModel
+		r.apiToModel(ctx, netSet, &mSet, "default")
+		r.apiToModel(ctx, netEmpty, &mEmpty, "default")
+		r.apiToModel(ctx, netUnset, &mUnset, "default")
+
+		assert.Equal(t, "poa.dalcastel.com", mSet.DomainName.ValueString())
+		assert.True(t, mEmpty.DomainName.IsNull())
+		assert.True(t, mUnset.DomainName.IsNull())
+	})
+
+	t.Run("multicast_dns round-trips for corporate", func(t *testing.T) {
+		name := "mDNS"
+		netOn := &unifi.Network{
+			ID:          "m1",
+			Purpose:     "corporate",
+			Name:        &name,
+			MdnsEnabled: true,
+		}
+		netOff := &unifi.Network{
+			ID:          "m2",
+			Purpose:     "corporate",
+			Name:        &name,
+			MdnsEnabled: false,
+		}
+
+		var mOn, mOff networkResourceModel
+		r.apiToModel(ctx, netOn, &mOn, "default")
+		r.apiToModel(ctx, netOff, &mOff, "default")
+
+		assert.True(t, mOn.MulticastDNS.ValueBool())
+		assert.False(t, mOff.MulticastDNS.ValueBool())
+	})
+
+	t.Run("vlan-only network nulls out all new corporate-only fields", func(t *testing.T) {
+		name := "VLAN-only"
+		vlan := int64(50)
+		bootServer := "10.0.0.1"
+		bootFilename := "boot"
+		domain := "leftover.example"
+		net := &unifi.Network{
+			ID:                "vo1",
+			Purpose:           "vlan-only",
+			Name:              &name,
+			VLAN:              &vlan,
+			VLANEnabled:       true,
+			DHCPDBootEnabled:  true,
+			DHCPDBootServer:   &bootServer,
+			DHCPDBootFilename: &bootFilename,
+			DomainName:        &domain,
+			MdnsEnabled:       true,
+		}
+
+		var model networkResourceModel
+		r.apiToModel(ctx, net, &model, "default")
+
+		assert.False(t, model.DHCPBootEnabled.ValueBool())
+		assert.True(t, model.DHCPBootServer.IsNull())
+		assert.True(t, model.DHCPBootFilename.IsNull())
+		assert.True(t, model.DomainName.IsNull())
+		assert.False(t, model.MulticastDNS.ValueBool())
 	})
 }
 
@@ -555,6 +794,88 @@ resource "terrifi_network" "test" {
 					}
 					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["site"], rs.Primary.Attributes["id"]), nil
 				},
+			},
+		},
+	})
+}
+
+// TestAccNetwork_dhcpBootDomainMdns exercises the E02 fields end-to-end against
+// whichever target the suite is pointing at: dhcp_boot_enabled / dhcp_boot_server
+// / dhcp_boot_filename (PXE), domain_name (DHCP option 15 search domain), and
+// multicast_dns (the mDNS reflector toggle).
+//
+// Controller-behavior notes (recorded as F-015 in testing/CONTROLLER_FINDINGS.md):
+//   - mdns_enabled is silently coerced to true on every POST/PUT, so this test
+//     does not exercise multicast_dns=false (it would always fail with
+//     "Provider produced inconsistent result"). Users who need it disabled must
+//     do so through the controller UI / site-level settings.
+//   - Optional string fields (dhcp_boot_server, dhcp_boot_filename, domain_name)
+//     persist controller-side when the user removes them from config. The
+//     generic applyPlanToState helper is "copy-if-set", so a null plan does
+//     not propagate to a clearing PUT. Clearing them via terraform is a
+//     follow-up — for now, set them to a new value to update or leave them
+//     in place. This test therefore covers create + update, not clear.
+//
+// Steps:
+//  1. Create the network with all five fields set; assert each round-trips.
+//  2. Update domain_name + dhcp_boot_filename in place; assert the change
+//     applied and unrelated fields stayed untouched.
+func TestAccNetwork_dhcpBootDomainMdns(t *testing.T) {
+	name := fmt.Sprintf("tfacc-e02-%s", randomSuffix())
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { preCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "terrifi_network" "test" {
+  name                = %q
+  purpose             = "corporate"
+  vlan_id             = 95
+  subnet              = "192.168.95.1/24"
+  dhcp_enabled        = true
+  dhcp_start          = "192.168.95.10"
+  dhcp_stop           = "192.168.95.250"
+  dhcp_boot_enabled   = true
+  dhcp_boot_server    = "192.168.95.5"
+  dhcp_boot_filename  = "netboot.xyz.kpxe"
+  domain_name         = "tfacc.example"
+  multicast_dns       = true
+}
+`, name),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_enabled", "true"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_server", "192.168.95.5"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_filename", "netboot.xyz.kpxe"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "domain_name", "tfacc.example"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "true"),
+				),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "terrifi_network" "test" {
+  name                = %q
+  purpose             = "corporate"
+  vlan_id             = 95
+  subnet              = "192.168.95.1/24"
+  dhcp_enabled        = true
+  dhcp_start          = "192.168.95.10"
+  dhcp_stop           = "192.168.95.250"
+  dhcp_boot_enabled   = true
+  dhcp_boot_server    = "192.168.95.5"
+  dhcp_boot_filename  = "netboot-v2.kpxe"
+  domain_name         = "tfacc-updated.example"
+  multicast_dns       = true
+}
+`, name),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("terrifi_network.test", "domain_name", "tfacc-updated.example"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_filename", "netboot-v2.kpxe"),
+					// Other PXE fields and mdns untouched in this step.
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_enabled", "true"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_server", "192.168.95.5"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "true"),
+				),
 			},
 		},
 	})

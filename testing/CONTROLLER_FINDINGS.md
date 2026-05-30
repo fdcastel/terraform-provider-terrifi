@@ -1,10 +1,11 @@
-# Controller findings catalog (F-001 … F-014)
+# Controller findings catalog (F-001 … F-015)
 
 The mock-controller investigation behind the `uos` test target catalogued 14
 controller / provider findings (F-001 … F-014). That investigation was run
 against the upstream `terraform-provider-unifi` provider, so each finding has
 to be re-mapped to terrifi, which has a different (and smaller) resource set
-and owns its own HTTP layer.
+and owns its own HTTP layer. F-015 was added later, surfaced while landing
+E02 (network: dhcp_boot_* / domain_name / multicast_dns).
 
 **Bottom line: none of the 14 findings map to a currently-failing terrifi
 test.** Each one is either (a) already handled by terrifi and proven by a
@@ -25,7 +26,7 @@ not ported; re-evaluate when it lands.
 | F-003 | `data.ap_group` requires `name` | dormant | No terrifi AP-group data source. Re-evaluate if one is added. |
 | F-004 | `data.client_qos_rate` requires `name` | dormant | No terrifi client-QoS-rate resource/data source. |
 | F-005 | default AP group is `"All APs"` not `"Default"` | dormant | Same as F-003 — no AP-group lookup in terrifi. |
-| F-006 | `network.domain_name` round-trips empty | **n/a** | local `unifi.Network` doesn't declare `domain_name`, so it's never sent or diffed. |
+| F-006 | `network.domain_name` round-trips empty | **handled** | `unifi.Network` exposes `DomainName *string` (E02); empty-string responses decode as null in `apiToModel` to match the schema's optional shape. Covered by the `domain_name round-trips` unit tests and `TestAccNetwork_dhcpBootDomainMdns`. |
 | F-007 | `unifi_firewall_rule` bool `null` vs `false` | dormant | terrifi has no `firewall_rule` (it uses zone-based firewall). The analogous bool-omitempty concern in `firewall_policy` is already handled (see `firewall_policy_api.go`). |
 | F-008 | `port_forward.wan.interface` rejects LAN IDs | dormant | No terrifi port-forward resource. |
 | F-009 | `traffic_route` fails on zero-device controller | dormant | No terrifi traffic-route resource. |
@@ -34,6 +35,7 @@ not ported; re-evaluate when it lands.
 | F-012 | `dynamic_dns` → `UnsupportedDynamicDns` | dormant | No terrifi dynamic-DNS resource. |
 | F-013 | `firewall_rule` WAN_IN index 20000+ rejected with devices | dormant | No terrifi `firewall_rule`. |
 | F-014 | `traffic_route` POST 400 (post-F-009) | dormant | No terrifi traffic-route resource. |
+| F-015 | `network.mdns_enabled` is coerced to `true` on write | **handled** | UOS 5.1.15 silently stores `mdns_enabled: true` regardless of what we POST/PUT (confirmed via direct curl: create with `false` → GET reads `true`; PUT with `false` → GET still reads `true`). terrifi's `multicast_dns` schema default is `true` to match, and `ModifyPlan` forces `false` only on vlan-only networks where the controller does not emit the field. There is no way to disable mdns per-network from this provider; users who need it off must use the controller UI / site-level settings. Covered by `TestAccNetwork_dhcpBootDomainMdns`. |
 
 ## Separate from the F-findings: the zone-based-firewall simulation gap
 
