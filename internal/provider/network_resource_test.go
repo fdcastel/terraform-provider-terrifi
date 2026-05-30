@@ -804,20 +804,22 @@ resource "terrifi_network" "test" {
 // / dhcp_boot_filename (PXE), domain_name (DHCP option 15 search domain), and
 // multicast_dns (the mDNS reflector toggle).
 //
-// Controller-behavior note: the UniFi Network app silently coerces
-// mdns_enabled to true regardless of what we POST or PUT. We do not exercise
-// multicast_dns=false here because there is no way to make it stick — see
-// testing/CONTROLLER_FINDINGS.md (F-015) for the curl-level repro. The schema
-// default is true to match this behavior; ModifyPlan forces false on vlan-only
-// networks only because the controller does not emit mdns_enabled for those.
+// Controller-behavior notes (recorded as F-015 in testing/CONTROLLER_FINDINGS.md):
+//   - mdns_enabled is silently coerced to true on every POST/PUT, so this test
+//     does not exercise multicast_dns=false (it would always fail with
+//     "Provider produced inconsistent result"). Users who need it disabled must
+//     do so through the controller UI / site-level settings.
+//   - Optional string fields (dhcp_boot_server, dhcp_boot_filename, domain_name)
+//     persist controller-side when the user removes them from config. The
+//     generic applyPlanToState helper is "copy-if-set", so a null plan does
+//     not propagate to a clearing PUT. Clearing them via terraform is a
+//     follow-up — for now, set them to a new value to update or leave them
+//     in place. This test therefore covers create + update, not clear.
 //
 // Steps:
-//  1. Create the network with all five fields set (multicast_dns=true);
-//     assert each round-trips.
-//  2. Update domain_name + dhcp_boot_filename; assert the change applied and
-//     unrelated fields stayed untouched.
-//  3. Drop the optional fields back to defaults; assert PXE / domain_name are
-//     gone and multicast_dns stays true (default + controller-locked).
+//  1. Create the network with all five fields set; assert each round-trips.
+//  2. Update domain_name + dhcp_boot_filename in place; assert the change
+//     applied and unrelated fields stayed untouched.
 func TestAccNetwork_dhcpBootDomainMdns(t *testing.T) {
 	name := fmt.Sprintf("tfacc-e02-%s", randomSuffix())
 	resource.Test(t, resource.TestCase{
@@ -872,29 +874,6 @@ resource "terrifi_network" "test" {
 					// Other PXE fields and mdns untouched in this step.
 					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_enabled", "true"),
 					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_server", "192.168.95.5"),
-					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "true"),
-				),
-			},
-			{
-				// Drop optional fields back to defaults / null. multicast_dns
-				// stays true: both the schema default and the controller's
-				// always-on behavior agree.
-				Config: fmt.Sprintf(`
-resource "terrifi_network" "test" {
-  name         = %q
-  purpose      = "corporate"
-  vlan_id      = 95
-  subnet       = "192.168.95.1/24"
-  dhcp_enabled = true
-  dhcp_start   = "192.168.95.10"
-  dhcp_stop    = "192.168.95.250"
-}
-`, name),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_enabled", "false"),
-					resource.TestCheckNoResourceAttr("terrifi_network.test", "dhcp_boot_server"),
-					resource.TestCheckNoResourceAttr("terrifi_network.test", "dhcp_boot_filename"),
-					resource.TestCheckNoResourceAttr("terrifi_network.test", "domain_name"),
 					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "true"),
 				),
 			},

@@ -173,17 +173,17 @@ func (r *networkResource) Schema(
 			},
 
 			"dhcp_boot_server": schema.StringAttribute{
-				MarkdownDescription: "DHCP option 66 — TFTP/PXE boot server IP. Only emitted when `dhcp_boot_enabled = true`.",
+				MarkdownDescription: "DHCP option 66 — TFTP/PXE boot server IP. Only emitted on leases when `dhcp_boot_enabled = true`. Note: removing this attribute from config does not clear it on the controller (see provider docs).",
 				Optional:            true,
 			},
 
 			"dhcp_boot_filename": schema.StringAttribute{
-				MarkdownDescription: "DHCP option 67 — boot filename (e.g. `netboot.xyz.kpxe`). Only emitted when `dhcp_boot_enabled = true`.",
+				MarkdownDescription: "DHCP option 67 — boot filename (e.g. `netboot.xyz.kpxe`). Only emitted on leases when `dhcp_boot_enabled = true`. Note: removing this attribute from config does not clear it on the controller (see provider docs).",
 				Optional:            true,
 			},
 
 			"domain_name": schema.StringAttribute{
-				MarkdownDescription: "Domain name published via DHCP option 15. Optional.",
+				MarkdownDescription: "Domain name published via DHCP option 15. Note: removing this attribute from config does not clear it on the controller (see provider docs).",
 				Optional:            true,
 			},
 
