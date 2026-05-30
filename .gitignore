@@ -42,3 +42,7 @@ scratch
 /terrifi
 /unifi-device-types/
 /unifi-device-types.html
+
+# Local scratchpad — plan drafts, vendored reference clones, probes.
+/tmp/
+
