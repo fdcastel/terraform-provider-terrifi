@@ -248,6 +248,7 @@ func (p *terrifiProvider) Resources(_ context.Context) []func() resource.Resourc
 // data sources (read-only lookups) as needed.
 func (p *terrifiProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
+		NewClientsDataSource,
 		NewDeviceDataSource,
 	}
 }

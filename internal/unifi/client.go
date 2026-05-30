@@ -32,4 +32,20 @@ type Client struct {
 	UseFixedIP                    bool     `json:"use_fixedip"`
 	VirtualNetworkOverrideEnabled *bool    `json:"virtual_network_override_enabled,omitempty"`
 	VirtualNetworkOverrideID      string   `json:"virtual_network_override_id,omitempty"`
+
+	// Read-only enrichment fields populated by the controller on /rest/user
+	// for known clients. omitempty keeps them off write payloads where they
+	// would otherwise overwrite controller-managed state. Consumed by the
+	// terrifi_clients data source; client_device_api.go's buildClientDeviceRequest
+	// explicitly copies only the fields the provider is authoritative over, so
+	// these never ride along on POST/PUT.
+	Hostname                  string `json:"hostname,omitempty"`
+	LastIP                    string `json:"last_ip,omitempty"`
+	LastConnectionNetworkID   string `json:"last_connection_network_id,omitempty"`
+	LastConnectionNetworkName string `json:"last_connection_network_name,omitempty"`
+	IsWired                   bool   `json:"is_wired,omitempty"`
+	IsGuest                   bool   `json:"is_guest,omitempty"`
+	OUI                       string `json:"oui,omitempty"`
+	FirstSeen                 int64  `json:"first_seen,omitempty"`
+	LastSeen                  int64  `json:"last_seen,omitempty"`
 }
