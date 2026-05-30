@@ -804,12 +804,20 @@ resource "terrifi_network" "test" {
 // / dhcp_boot_filename (PXE), domain_name (DHCP option 15 search domain), and
 // multicast_dns (the mDNS reflector toggle).
 //
+// Controller-behavior note: the UniFi Network app silently coerces
+// mdns_enabled to true regardless of what we POST or PUT. We do not exercise
+// multicast_dns=false here because there is no way to make it stick — see
+// testing/CONTROLLER_FINDINGS.md (F-015) for the curl-level repro. The schema
+// default is true to match this behavior; ModifyPlan forces false on vlan-only
+// networks only because the controller does not emit mdns_enabled for those.
+//
 // Steps:
-//  1. Create the network with all five fields set; assert each round-trips.
-//  2. Update domain_name + multicast_dns; assert the change applied and the PXE
-//     fields stayed untouched.
-//  3. Clear all five (back to defaults); assert the controller stops emitting
-//     them.
+//  1. Create the network with all five fields set (multicast_dns=true);
+//     assert each round-trips.
+//  2. Update domain_name + dhcp_boot_filename; assert the change applied and
+//     unrelated fields stayed untouched.
+//  3. Drop the optional fields back to defaults; assert PXE / domain_name are
+//     gone and multicast_dns stays true (default + controller-locked).
 func TestAccNetwork_dhcpBootDomainMdns(t *testing.T) {
 	name := fmt.Sprintf("tfacc-e02-%s", randomSuffix())
 	resource.Test(t, resource.TestCase{
@@ -853,24 +861,24 @@ resource "terrifi_network" "test" {
   dhcp_stop           = "192.168.95.250"
   dhcp_boot_enabled   = true
   dhcp_boot_server    = "192.168.95.5"
-  dhcp_boot_filename  = "netboot.xyz.kpxe"
+  dhcp_boot_filename  = "netboot-v2.kpxe"
   domain_name         = "tfacc-updated.example"
-  multicast_dns       = false
+  multicast_dns       = true
 }
 `, name),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("terrifi_network.test", "domain_name", "tfacc-updated.example"),
-					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "false"),
-					// PXE fields untouched in this step.
+					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_filename", "netboot-v2.kpxe"),
+					// Other PXE fields and mdns untouched in this step.
 					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_enabled", "true"),
 					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_server", "192.168.95.5"),
-					resource.TestCheckResourceAttr("terrifi_network.test", "dhcp_boot_filename", "netboot.xyz.kpxe"),
+					resource.TestCheckResourceAttr("terrifi_network.test", "multicast_dns", "true"),
 				),
 			},
 			{
-				// Drop all five back to defaults / null.
-				// multicast_dns falls back to the schema default (true) since the
-				// controller defaults it to true on corporate networks.
+				// Drop optional fields back to defaults / null. multicast_dns
+				// stays true: both the schema default and the controller's
+				// always-on behavior agree.
 				Config: fmt.Sprintf(`
 resource "terrifi_network" "test" {
   name         = %q
