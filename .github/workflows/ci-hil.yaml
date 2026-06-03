@@ -1,15 +1,15 @@
-name: CI - HIL
-
 # Hardware-in-the-loop tests. They run on a self-hosted runner with the labels
 # below, wired to a real UniFi controller — infrastructure that only exists in
 # the upstream repo. The `if:` guard on the job keeps this inert in forks:
 # without it, a fork's PR/schedule queues a job that can never be scheduled
 # (no matching runner), leaving the required check stuck "Expected" forever.
 #
-# To opt a fork into HIL: (1) replace the repository name in the `if:` guard
-# below with your own `owner/repo`; (2) register a self-hosted runner with the
-# `self-hosted` + `terrifi-hardware-test` labels, pointed at your controller;
-# (3) add the `TERRIFI_HIL_TEST_UNIFI_API_KEY` secret.
+# To opt a fork into HIL:
+# 1. replace the repository name in the `if:` guard below with your own `owner/repo`
+# 2. register a self-hosted runner with the `self-hosted` + `terrifi-hardware-test` labels, pointed at your controller
+# 3. add the `TERRIFI_HIL_TEST_UNIFI_API_KEY` secret in https://github.com/<owner/repo>/settings/secrets/actions.
+
+name: CI - HIL
 
 concurrency:
   group: ${{ github.workflow }}
