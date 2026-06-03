@@ -1,3 +1,6 @@
+# Builds and releases the current ref as a Github release.
+# Tags the current ref, builds the provider with GoReleaser, and publishes a
+# signed GitHub Release that the Terraform/OpenTofu registries can index.
 name: Release
 
 on:
@@ -15,6 +18,21 @@ jobs:
     name: Release
     runs-on: ubuntu-24.04
     steps:
+      # Check for expected secrets and error with a useful message instead 
+      # of failing cryptically in the build/release steps.
+      - name: Check required secrets
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          missing=
+          [ -z "$GPG_PRIVATE_KEY" ] && missing="$missing GPG_PRIVATE_KEY"
+          [ -z "$GPG_PASSPHRASE" ] && missing="$missing GPG_PASSPHRASE"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required release secret(s):$missing. See the header comment in .github/workflows/release.yml for how to set them."
+            exit 1
+          fi
+          echo "Required release secrets are present."
       - name: Checkout
         uses: actions/checkout@v6
         with:

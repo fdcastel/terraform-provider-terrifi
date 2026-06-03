@@ -1,3 +1,17 @@
+# Builds and publishes the device-types GitHub Pages site. It runs on the
+# self-hosted HIL runner (it needs a real controller to enumerate device
+# types) and deploys to the upstream repo's Pages environment. The `if:`
+# guard keeps it inert in forks: without it, a push to a fork's main touching
+# the watched paths queues a job that can't schedule (no runner, no Pages
+# env, no secret), leaving a permanent red X on the fork's history.
+#
+# To opt a fork in:
+# 1. replace the repository name in the `if:` guard
+# 2. register a self-hosted runner (see ci-hil.yaml)
+# 3. enable Github Pages in https://github.com/<owner/repo>/settings/pages
+# 4. add the TERRIFI_HIL_TEST_UNIFI_API_KEY secret in 
+#    https://github.com/<owner/repo>/settings/secrets/actions.
+
 name: Deploy Site
 
 on:
@@ -21,6 +35,8 @@ concurrency:
 jobs:
   deploy:
     name: Deploy
+    # Skip everywhere except the upstream repo — see header.
+    if: github.repository == 'alexklibisz/terraform-provider-terrifi'
     runs-on:
       - self-hosted
       - terrifi-hardware-test
