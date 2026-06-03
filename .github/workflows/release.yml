@@ -1,21 +1,7 @@
-name: Release
-
+# Builds and releases the current ref as a Github release.
 # Tags the current ref, builds the provider with GoReleaser, and publishes a
 # signed GitHub Release that the Terraform/OpenTofu registries can index.
-#
-# Required repository secrets (Settings → Secrets and variables → Actions):
-#   GPG_PRIVATE_KEY  — ASCII-armored private key used to sign the checksums.
-#                      Its public half must be registered with the registry
-#                      under your provider namespace.
-#   GPG_PASSPHRASE   — passphrase for that key.
-# Generate a key with `gpg --full-generate-key`, export the private half with
-# `gpg --armor --export-secret-keys <KEYID>`, and register the public half
-# with the OpenTofu/Terraform registry for your namespace.
-#
-# workflow_dispatch is the only trigger, so this stays inert in a fork until
-# someone explicitly runs it from the Actions tab. The "Check secrets" step
-# below fails fast with a clear message if the secrets are missing, instead of
-# erroring cryptically mid-run inside GoReleaser's GPG signing.
+name: Release
 
 on:
   workflow_dispatch:
@@ -32,6 +18,8 @@ jobs:
     name: Release
     runs-on: ubuntu-24.04
     steps:
+      # Check for expected secrets and error with a useful message instead 
+      # of failing cryptically in the build/release steps.
       - name: Check required secrets
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
