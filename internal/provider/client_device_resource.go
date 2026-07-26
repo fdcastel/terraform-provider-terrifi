@@ -292,7 +292,19 @@ func (r *clientDeviceResource) Read(
 
 	site := r.client.SiteOrDefault(state.Site)
 
-	apiObj, err := r.client.GetClientDevice(ctx, site, state.ID.ValueString())
+	// Importing by MAC leaves a MAC in the ID until the first successful read;
+	// GetClientDevice only understands the controller's internal _id. Route on
+	// the shape of the value. apiToModel replaces it with the _id afterwards,
+	// so this only ever takes the MAC path once.
+	id := state.ID.ValueString()
+
+	var apiObj *unifi.Client
+	var err error
+	if macRegexp.MatchString(id) {
+		apiObj, err = r.client.GetClientDeviceByMAC(ctx, site, id)
+	} else {
+		apiObj, err = r.client.GetClientDevice(ctx, site, id)
+	}
 	if err != nil {
 		if _, ok := err.(*unifi.NotFoundError); ok {
 			resp.State.RemoveResource(ctx)
@@ -300,7 +312,7 @@ func (r *clientDeviceResource) Read(
 		}
 		resp.Diagnostics.AddError(
 			"Error Reading Client Device",
-			fmt.Sprintf("Could not read client device %s: %s", state.ID.ValueString(), err.Error()),
+			fmt.Sprintf("Could not read client device %s: %s", id, err.Error()),
 		)
 		return
 	}
@@ -440,20 +452,45 @@ func (r *clientDeviceResource) Delete(
 	}
 }
 
+// parseClientDeviceImportID splits an import ID into an optional site and the
+// resource identifier, which may be either the controller's internal _id or a
+// MAC address.
+//
+// Splitting on the first colon does not work here, because a MAC address is
+// itself colon-separated: "70:c9:32:48:ab:f7" would be read as site "70" and id
+// "c9:32:48:ab:f7", and every later request would go to /api/s/70/... and come
+// back as api.err.NoSiteContext. Colon *count* disambiguates the four forms:
+//
+//	0 colons  bare internal _id             "6a1f65b362142e7d6667c961"
+//	1 colon   site + internal _id           "default:6a1f65b362142e7d6667c961"
+//	5 colons  bare MAC                      "70:c9:32:48:ab:f7"
+//	6 colons  site + MAC                    "default:70:c9:32:48:ab:f7"
+//
+// Anything else is returned as a bare identifier with no site, which will
+// surface as a not-found from the read rather than a silently wrong site.
+func parseClientDeviceImportID(importID string) (site, id string) {
+	switch strings.Count(importID, ":") {
+	case 5:
+		return "", importID
+	case 6, 1:
+		idx := strings.Index(importID, ":")
+		return importID[:idx], importID[idx+1:]
+	default:
+		return "", importID
+	}
+}
+
 func (r *clientDeviceResource) ImportState(
 	ctx context.Context,
 	req resource.ImportStateRequest,
 	resp *resource.ImportStateResponse,
 ) {
-	parts := strings.SplitN(req.ID, ":", 2)
+	site, id := parseClientDeviceImportID(req.ID)
 
-	if len(parts) == 2 {
-		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("site"), parts[0])...)
-		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
-		return
+	if site != "" {
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("site"), site)...)
 	}
-
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 }
 
 // ---------------------------------------------------------------------------

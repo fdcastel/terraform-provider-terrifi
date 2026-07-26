@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"testing"
 
@@ -713,6 +715,117 @@ func TestClientDeviceNoteRoundTrip(t *testing.T) {
 		r.applyPlanToState(plan, state)
 
 		assert.True(t, state.Note.IsNull())
+	})
+}
+
+// TestParseClientDeviceImportID pins the colon-count classification. Splitting
+// on the first colon used to send every MAC import to /api/s/<first octet>/...
+// and fail with api.err.NoSiteContext.
+func TestParseClientDeviceImportID(t *testing.T) {
+	tests := []struct {
+		name     string
+		importID string
+		wantSite string
+		wantID   string
+	}{
+		{
+			name:     "bare internal id",
+			importID: "6a1f65b362142e7d6667c961",
+			wantSite: "",
+			wantID:   "6a1f65b362142e7d6667c961",
+		},
+		{
+			name:     "site and internal id",
+			importID: "default:6a1f65b362142e7d6667c961",
+			wantSite: "default",
+			wantID:   "6a1f65b362142e7d6667c961",
+		},
+		{
+			name:     "bare mac is not split into site and id",
+			importID: "70:c9:32:48:ab:f7",
+			wantSite: "",
+			wantID:   "70:c9:32:48:ab:f7",
+		},
+		{
+			name:     "site and mac",
+			importID: "default:70:c9:32:48:ab:f7",
+			wantSite: "default",
+			wantID:   "70:c9:32:48:ab:f7",
+		},
+		{
+			name:     "uppercase mac is preserved verbatim",
+			importID: "AA:BB:CC:DD:EE:FF",
+			wantSite: "",
+			wantID:   "AA:BB:CC:DD:EE:FF",
+		},
+		{
+			name:     "malformed input falls back to a bare id rather than guessing a site",
+			importID: "a:b:c",
+			wantSite: "",
+			wantID:   "a:b:c",
+		},
+		{
+			name:     "empty input",
+			importID: "",
+			wantSite: "",
+			wantID:   "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			site, id := parseClientDeviceImportID(tc.importID)
+
+			assert.Equal(t, tc.wantSite, site)
+			assert.Equal(t, tc.wantID, id)
+		})
+	}
+}
+
+// TestGetClientDeviceByMAC covers the client-side filtering. The controller's
+// ?mac= query parameter is ignored by the UDM, which returns every user record,
+// so the old "exactly one result" check reported not-found on any site with
+// more than one client.
+func TestGetClientDeviceByMAC(t *testing.T) {
+	users := []unifi.Client{
+		{ID: "id-1", MAC: "aa:bb:cc:dd:ee:01", Name: "first"},
+		{ID: "id-2", MAC: "aa:bb:cc:dd:ee:02", Name: "second"},
+		{ID: "id-3", MAC: "aa:bb:cc:dd:ee:03", Name: "third"},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Deliberately ignore any ?mac= filter, exactly as the UDM does.
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"meta": map[string]any{"rc": "ok"},
+			"data": users,
+		})
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL, false)
+	ctx := context.Background()
+
+	t.Run("finds a client even though the server returns all of them", func(t *testing.T) {
+		got, err := client.GetClientDeviceByMAC(ctx, "default", "aa:bb:cc:dd:ee:02")
+
+		require.NoError(t, err)
+		assert.Equal(t, "id-2", got.ID)
+		assert.Equal(t, "second", got.Name)
+	})
+
+	t.Run("matches case-insensitively", func(t *testing.T) {
+		got, err := client.GetClientDeviceByMAC(ctx, "default", "AA:BB:CC:DD:EE:03")
+
+		require.NoError(t, err)
+		assert.Equal(t, "id-3", got.ID)
+	})
+
+	t.Run("reports not-found for an absent MAC", func(t *testing.T) {
+		_, err := client.GetClientDeviceByMAC(ctx, "default", "aa:bb:cc:dd:ee:99")
+
+		require.Error(t, err)
+		assert.IsType(t, &unifi.NotFoundError{}, err)
 	})
 }
 
@@ -1682,6 +1795,70 @@ resource "terrifi_client_device" "test" {
 						return "", fmt.Errorf("resource not found in state")
 					}
 					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["site"], rs.Primary.Attributes["id"]), nil
+				},
+			},
+		},
+	})
+}
+
+// TestAccClientDevice_importByMAC imports using the MAC rather than the
+// controller's internal _id. Splitting the import ID on its first colon used to
+// turn "70:c9:32:48:ab:f7" into site "70" plus a truncated id, so every
+// subsequent request went to /api/s/70/... and failed with api.err.NoSiteContext.
+func TestAccClientDevice_importByMAC(t *testing.T) {
+	mac := randomMAC()
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { preCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "terrifi_client_device" "test" {
+  mac  = %q
+  name = "tfacc-import-mac"
+}
+`, mac),
+			},
+			{
+				ResourceName:      "terrifi_client_device.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateId:     mac,
+				// The imported ID starts out as the MAC and is replaced by the
+				// internal _id on the first read, so it cannot match the prior state.
+				ImportStateVerifyIgnore: []string{"id"},
+			},
+		},
+	})
+}
+
+// TestAccClientDevice_importBySiteAndMAC covers the six-colon form, which has to
+// be told apart from a bare MAC by colon count alone.
+func TestAccClientDevice_importBySiteAndMAC(t *testing.T) {
+	mac := randomMAC()
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { preCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "terrifi_client_device" "test" {
+  mac  = %q
+  name = "tfacc-import-site-mac"
+}
+`, mac),
+			},
+			{
+				ResourceName:            "terrifi_client_device.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"id"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs := s.RootModule().Resources["terrifi_client_device.test"]
+					if rs == nil {
+						return "", fmt.Errorf("resource not found in state")
+					}
+					return fmt.Sprintf("%s:%s", rs.Primary.Attributes["site"], mac), nil
 				},
 			},
 		},
