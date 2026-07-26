@@ -138,7 +138,12 @@ func (r *clientDeviceResource) Schema(
 
 			"local_dns_record": schema.StringAttribute{
 				MarkdownDescription: "A local DNS hostname for this client device. " +
-					"Requires `fixed_ip` to also be set (controller requirement).",
+					"Requires `fixed_ip` to also be set (controller requirement).\n\n" +
+					"~> **Note:** if a DNS A record already exists for this hostname under " +
+					"Settings → Policies → DNS records, the controller rejects *every* write to " +
+					"this client's record with an opaque `api.err.Invalid` — regardless of which " +
+					"field changed. Delete the colliding A record first. See " +
+					"`testing/CONTROLLER_FINDINGS.md` F-016.",
 				Optional: true,
 				Validators: []validator.String{
 					stringvalidator.AlsoRequires(path.MatchRoot("fixed_ip")),

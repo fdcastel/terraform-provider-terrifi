@@ -168,7 +168,7 @@ func TestNetworkModelToAPI(t *testing.T) {
 		setModel := &networkResourceModel{
 			Name:       types.StringValue("With Domain"),
 			Purpose:    types.StringValue("corporate"),
-			DomainName: types.StringValue("poa.dalcastel.com"),
+			DomainName: types.StringValue("lab.example.com"),
 		}
 		nullModel := &networkResourceModel{
 			Name:       types.StringValue("No Domain"),
@@ -180,7 +180,7 @@ func TestNetworkModelToAPI(t *testing.T) {
 		nullNet := r.modelToAPI(ctx, nullModel)
 
 		require.NotNil(t, setNet.DomainName)
-		assert.Equal(t, "poa.dalcastel.com", *setNet.DomainName)
+		assert.Equal(t, "lab.example.com", *setNet.DomainName)
 		assert.Nil(t, nullNet.DomainName)
 	})
 
@@ -399,7 +399,7 @@ func TestNetworkAPIToModel(t *testing.T) {
 
 	t.Run("domain_name round-trips for corporate; null when controller omits or empties", func(t *testing.T) {
 		name := "Domain Net"
-		domain := "poa.dalcastel.com"
+		domain := "lab.example.com"
 		netSet := &unifi.Network{
 			ID:         "d1",
 			Purpose:    "corporate",
@@ -424,7 +424,7 @@ func TestNetworkAPIToModel(t *testing.T) {
 		r.apiToModel(ctx, netEmpty, &mEmpty, "default")
 		r.apiToModel(ctx, netUnset, &mUnset, "default")
 
-		assert.Equal(t, "poa.dalcastel.com", mSet.DomainName.ValueString())
+		assert.Equal(t, "lab.example.com", mSet.DomainName.ValueString())
 		assert.True(t, mEmpty.DomainName.IsNull())
 		assert.True(t, mUnset.DomainName.IsNull())
 	})
