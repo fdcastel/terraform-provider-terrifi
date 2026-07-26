@@ -319,7 +319,17 @@ func (r *clientDeviceResource) Read(
 
 	r.apiToModel(apiObj, &state, site)
 	state.ClientGroupIDs = priorGroupIDs
-	state.NetworkID = priorNetworkID
+
+	// Keep whatever network_id the configuration already established, so a
+	// fixed_ip that resolves its scope through network_override_id does not
+	// pick up the network_id the controller echoes back. On import there is no
+	// prior value, and in that case apiToModel's reading — including the
+	// last-connection fallback for UI-created reservations — has to stand, or
+	// the import comes back with a diff proposing a write the controller does
+	// not need.
+	if !priorNetworkID.IsNull() {
+		state.NetworkID = priorNetworkID
+	}
 
 	// Read fingerprint override via the v2 client info API. This may fail for
 	// clients that have never connected (404) — treat as no override. Other
@@ -675,17 +685,32 @@ func (r *clientDeviceResource) apiToModel(c *unifi.Client, m *clientDeviceResour
 	m.Name = stringValueOrNull(c.Name)
 	m.Note = stringValueOrNull(c.Note)
 
+	hasNetworkOverride := c.VirtualNetworkOverrideEnabled != nil &&
+		*c.VirtualNetworkOverrideEnabled && c.VirtualNetworkOverrideID != ""
+
 	// Only populate fixed IP when the controller says it's enabled and has a value.
 	if c.UseFixedIP && c.FixedIP != "" {
 		m.FixedIP = types.StringValue(c.FixedIP)
-		m.NetworkID = stringValueOrNull(c.NetworkID)
+
+		// Reservations created through the UI carry use_fixedip and fixed_ip but
+		// no explicit network_id — the controller resolves the DHCP scope from
+		// the address itself. Reading that back as null makes every plan propose
+		// writing a network_id the controller already behaves as if it had, so
+		// fall back to the network the client was last seen on. Skipped when a
+		// network override is in play, where the last-connection network is the
+		// override's and not something the user configured.
+		networkID := c.NetworkID
+		if networkID == "" && !hasNetworkOverride {
+			networkID = c.LastConnectionNetworkID
+		}
+		m.NetworkID = stringValueOrNull(networkID)
 	} else {
 		m.FixedIP = types.StringNull()
 		m.NetworkID = types.StringNull()
 	}
 
 	// Only populate network override when enabled and has a value.
-	if c.VirtualNetworkOverrideEnabled != nil && *c.VirtualNetworkOverrideEnabled && c.VirtualNetworkOverrideID != "" {
+	if hasNetworkOverride {
 		m.NetworkOverrideID = types.StringValue(c.VirtualNetworkOverrideID)
 	} else {
 		m.NetworkOverrideID = types.StringNull()

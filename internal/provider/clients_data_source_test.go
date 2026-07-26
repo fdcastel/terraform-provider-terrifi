@@ -81,6 +81,47 @@ func TestClientsEntryValues_emptyStringsAreNull(t *testing.T) {
 	}
 }
 
+// TestClientsEntryValues_networkIDFallback keeps network_id and network_name
+// reading from the same place. network_name has always come from the
+// last-connection field; taking network_id straight off the record reported a
+// populated name next to a null id for every UI-created reservation.
+func TestClientsEntryValues_networkIDFallback(t *testing.T) {
+	t.Run("falls back to the last-connection network id", func(t *testing.T) {
+		c := &unifi.Client{
+			ID:                        "u1",
+			MAC:                       "aa:bb:cc:dd:ee:ff",
+			LastConnectionNetworkID:   "n1",
+			LastConnectionNetworkName: "10 Core",
+		}
+
+		v := clientsEntryValues(c)
+
+		assert.Equal(t, "n1", v["network_id"].(interface{ ValueString() string }).ValueString())
+		assert.Equal(t, "10 Core", v["network_name"].(interface{ ValueString() string }).ValueString())
+	})
+
+	t.Run("an explicit network id wins", func(t *testing.T) {
+		c := &unifi.Client{
+			ID:                      "u1",
+			MAC:                     "aa:bb:cc:dd:ee:ff",
+			NetworkID:               "n-explicit",
+			LastConnectionNetworkID: "n1",
+		}
+
+		v := clientsEntryValues(c)
+
+		assert.Equal(t, "n-explicit", v["network_id"].(interface{ ValueString() string }).ValueString())
+	})
+
+	t.Run("null when neither source has a value", func(t *testing.T) {
+		c := &unifi.Client{ID: "u1", MAC: "aa:bb:cc:dd:ee:ff"}
+
+		v := clientsEntryValues(c)
+
+		assert.True(t, v["network_id"].IsNull())
+	})
+}
+
 // TestUnifiClient_UnmarshalEnrichmentFields verifies that a realistic
 // /rest/user response (as observed on UOS 5.1.15) decodes the new read-only
 // fields into the expected Go-struct shape.
