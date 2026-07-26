@@ -757,6 +757,30 @@ func TestClientDeviceNetworkIDFallback(t *testing.T) {
 		assert.Equal(t, "net-explicit", m.NetworkID.ValueString())
 	})
 
+	t.Run("override wins even when the controller echoes a network_id", func(t *testing.T) {
+		// The controller reports the network the override resolved to. Surfacing
+		// it would propose writing a network_id the configuration never set --
+		// TestAccClientDevice_fixedIPWithNetworkOverride asserts the attribute
+		// stays absent, and this is the unit-level guard for it.
+		enabled := true
+		c := &unifi.Client{
+			ID:                            "c1",
+			MAC:                           "aa:bb:cc:dd:ee:ff",
+			UseFixedIP:                    true,
+			FixedIP:                       "192.168.10.20",
+			NetworkID:                     "net-resolved-by-override",
+			VirtualNetworkOverrideEnabled: &enabled,
+			VirtualNetworkOverrideID:      "net-override",
+		}
+
+		var m clientDeviceResourceModel
+		r.apiToModel(c, &m, "default")
+
+		assert.True(t, m.NetworkID.IsNull(),
+			"network_id must stay null under an override even when the controller reports one")
+		assert.Equal(t, "net-override", m.NetworkOverrideID.ValueString())
+	})
+
 	t.Run("no fallback when a network override is in play", func(t *testing.T) {
 		// The last-connection network is the override's, not something the
 		// user configured, so borrowing it would invent a network_id.

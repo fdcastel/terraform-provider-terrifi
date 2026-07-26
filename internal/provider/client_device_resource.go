@@ -692,18 +692,26 @@ func (r *clientDeviceResource) apiToModel(c *unifi.Client, m *clientDeviceResour
 	if c.UseFixedIP && c.FixedIP != "" {
 		m.FixedIP = types.StringValue(c.FixedIP)
 
-		// Reservations created through the UI carry use_fixedip and fixed_ip but
-		// no explicit network_id — the controller resolves the DHCP scope from
-		// the address itself. Reading that back as null makes every plan propose
-		// writing a network_id the controller already behaves as if it had, so
-		// fall back to the network the client was last seen on. Skipped when a
-		// network override is in play, where the last-connection network is the
-		// override's and not something the user configured.
-		networkID := c.NetworkID
-		if networkID == "" && !hasNetworkOverride {
-			networkID = c.LastConnectionNetworkID
+		switch {
+		case hasNetworkOverride:
+			// Under an override the controller reports the network the override
+			// resolved to. That is not user intent — network_override_id is —
+			// so surfacing it would propose writing a network_id the
+			// configuration never set.
+			m.NetworkID = types.StringNull()
+
+		case c.NetworkID != "":
+			m.NetworkID = types.StringValue(c.NetworkID)
+
+		default:
+			// Reservations created through the UI carry use_fixedip and fixed_ip
+			// but no explicit network_id — the controller resolves the DHCP
+			// scope from the address itself. Reading that back as null makes
+			// every plan propose writing a network_id the controller already
+			// behaves as if it had, so fall back to the network the client was
+			// last seen on.
+			m.NetworkID = stringValueOrNull(c.LastConnectionNetworkID)
 		}
-		m.NetworkID = stringValueOrNull(networkID)
 	} else {
 		m.FixedIP = types.StringNull()
 		m.NetworkID = types.StringNull()
