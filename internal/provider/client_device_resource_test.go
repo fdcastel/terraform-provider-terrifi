@@ -718,6 +718,94 @@ func TestClientDeviceNoteRoundTrip(t *testing.T) {
 	})
 }
 
+// TestClientDeviceNetworkIDFallback covers reading network_id for reservations
+// the controller serves without one. A reservation created through the UI has
+// use_fixedip and fixed_ip but no explicit network_id — the DHCP scope is
+// resolved from the address — so reading it back as null made every plan
+// propose writing a network_id the controller already behaves as if it had.
+func TestClientDeviceNetworkIDFallback(t *testing.T) {
+	r := &clientDeviceResource{}
+
+	t.Run("falls back to the last-connection network when none is set", func(t *testing.T) {
+		c := &unifi.Client{
+			ID:                      "c1",
+			MAC:                     "aa:bb:cc:dd:ee:ff",
+			UseFixedIP:              true,
+			FixedIP:                 "192.168.10.20",
+			LastConnectionNetworkID: "net-core",
+		}
+
+		var m clientDeviceResourceModel
+		r.apiToModel(c, &m, "default")
+
+		assert.Equal(t, "net-core", m.NetworkID.ValueString())
+	})
+
+	t.Run("an explicit network_id wins over the fallback", func(t *testing.T) {
+		c := &unifi.Client{
+			ID:                      "c1",
+			MAC:                     "aa:bb:cc:dd:ee:ff",
+			UseFixedIP:              true,
+			FixedIP:                 "192.168.10.20",
+			NetworkID:               "net-explicit",
+			LastConnectionNetworkID: "net-core",
+		}
+
+		var m clientDeviceResourceModel
+		r.apiToModel(c, &m, "default")
+
+		assert.Equal(t, "net-explicit", m.NetworkID.ValueString())
+	})
+
+	t.Run("no fallback when a network override is in play", func(t *testing.T) {
+		// The last-connection network is the override's, not something the
+		// user configured, so borrowing it would invent a network_id.
+		enabled := true
+		c := &unifi.Client{
+			ID:                            "c1",
+			MAC:                           "aa:bb:cc:dd:ee:ff",
+			UseFixedIP:                    true,
+			FixedIP:                       "192.168.10.20",
+			VirtualNetworkOverrideEnabled: &enabled,
+			VirtualNetworkOverrideID:      "net-override",
+			LastConnectionNetworkID:       "net-core",
+		}
+
+		var m clientDeviceResourceModel
+		r.apiToModel(c, &m, "default")
+
+		assert.True(t, m.NetworkID.IsNull(), "network_id must stay null under an override")
+		assert.Equal(t, "net-override", m.NetworkOverrideID.ValueString())
+	})
+
+	t.Run("no fallback without a fixed IP", func(t *testing.T) {
+		c := &unifi.Client{
+			ID:                      "c1",
+			MAC:                     "aa:bb:cc:dd:ee:ff",
+			LastConnectionNetworkID: "net-core",
+		}
+
+		var m clientDeviceResourceModel
+		r.apiToModel(c, &m, "default")
+
+		assert.True(t, m.NetworkID.IsNull())
+	})
+
+	t.Run("null when neither source has a value", func(t *testing.T) {
+		c := &unifi.Client{
+			ID:         "c1",
+			MAC:        "aa:bb:cc:dd:ee:ff",
+			UseFixedIP: true,
+			FixedIP:    "192.168.10.20",
+		}
+
+		var m clientDeviceResourceModel
+		r.apiToModel(c, &m, "default")
+
+		assert.True(t, m.NetworkID.IsNull())
+	})
+}
+
 // TestParseClientDeviceImportID pins the colon-count classification. Splitting
 // on the first colon used to send every MAC import to /api/s/<first octet>/...
 // and fail with api.err.NoSiteContext.

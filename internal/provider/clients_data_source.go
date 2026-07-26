@@ -82,8 +82,11 @@ func clientsEntrySchemaAttributes() map[string]schema.Attribute {
 			Computed:            true,
 		},
 		"network_id": schema.StringAttribute{
-			MarkdownDescription: "The configured network ID for the client (set when `fixed_ip` is in use).",
-			Computed:            true,
+			MarkdownDescription: "The configured network ID for the client (set when `fixed_ip` is in use). " +
+				"Reservations created through the controller UI carry no explicit `network_id` — the " +
+				"DHCP scope is resolved from the address — so this falls back to " +
+				"`last_connection_network_id`, keeping it consistent with `network_name`.",
+			Computed: true,
 		},
 		"network_name": schema.StringAttribute{
 			MarkdownDescription: "The name of the network the client was last seen on (controller field `last_connection_network_name`).",
@@ -235,6 +238,17 @@ func clientsEntryValues(c *unifi.Client) map[string]attr.Value {
 	if c.Blocked != nil {
 		blocked = *c.Blocked
 	}
+
+	// network_name already comes from the last-connection field; reading
+	// network_id straight off the record made the pair disagree, reporting a
+	// populated name next to a null id for every UI-created reservation (those
+	// carry no explicit network_id — the controller resolves the DHCP scope
+	// from the address). Use the same source for both.
+	networkID := c.NetworkID
+	if networkID == "" {
+		networkID = c.LastConnectionNetworkID
+	}
+
 	return map[string]attr.Value{
 		"id":               types.StringValue(c.ID),
 		"mac":              types.StringValue(c.MAC),
@@ -242,7 +256,7 @@ func clientsEntryValues(c *unifi.Client) map[string]attr.Value {
 		"hostname":         stringValueOrNull(c.Hostname),
 		"ip":               stringValueOrNull(c.LastIP),
 		"fixed_ip":         stringValueOrNull(c.FixedIP),
-		"network_id":       stringValueOrNull(c.NetworkID),
+		"network_id":       stringValueOrNull(networkID),
 		"network_name":     stringValueOrNull(c.LastConnectionNetworkName),
 		"is_wired":         types.BoolValue(c.IsWired),
 		"is_guest":         types.BoolValue(c.IsGuest),
