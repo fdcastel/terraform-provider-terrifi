@@ -1,11 +1,13 @@
-# Controller findings catalog (F-001 … F-015)
+# Controller findings catalog (F-001 … F-016)
 
 The mock-controller investigation behind the `uos` test target catalogued 14
 controller / provider findings (F-001 … F-014). That investigation was run
 against the upstream `terraform-provider-unifi` provider, so each finding has
 to be re-mapped to terrifi, which has a different (and smaller) resource set
 and owns its own HTTP layer. F-015 was added later, surfaced while landing
-E02 (network: dhcp_boot_* / domain_name / multicast_dns).
+E02 (network: dhcp_boot_* / domain_name / multicast_dns). F-016 was
+surfaced on 2026-06-02 while importing an existing UDM-Pro site's DHCP
+reservations into `terrifi_client_device`.
 
 **Bottom line: none of the 14 findings map to a currently-failing terrifi
 test.** Each one is either (a) already handled by terrifi and proven by a
@@ -36,6 +38,7 @@ not ported; re-evaluate when it lands.
 | F-013 | `firewall_rule` WAN_IN index 20000+ rejected with devices | dormant | No terrifi `firewall_rule`. |
 | F-014 | `traffic_route` POST 400 (post-F-009) | dormant | No terrifi traffic-route resource. |
 | F-015 | `network.mdns_enabled` is coerced to `true` on write | **handled** | UOS 5.1.15 silently stores `mdns_enabled: true` regardless of what we POST/PUT (confirmed via direct curl: create with `false` → GET reads `true`; PUT with `false` → GET still reads `true`). terrifi's `multicast_dns` schema default is `true` to match, and `ModifyPlan` forces `false` only on vlan-only networks where the controller does not emit the field. There is no way to disable mdns per-network from this provider; users who need it off must use the controller UI / site-level settings. Covered by `TestAccNetwork_dhcpBootDomainMdns`. |
+| F-016 | DNS A record name collision blocks every write to a `/rest/user` reservation that carries that hostname as `local_dns_record` | **n/a (controller behavior; user-side fix required)** | The controller's reservation-writer validates that the reservation's `local_dns_record` value is not already owned by an explicit DNS A record. If a row exists at Settings → Policies → DNS records with the same hostname, every `POST`/`PUT` on `/rest/user/{id}` for that MAC fails with the opaque `api.err.Invalid` — independent of which `_id`, what payload, or what other fields change. Surfaced 2026-06-02 against UDM-Pro Network 10.x while bulk-importing an existing site's reservations: 22 of 23 applied cleanly and one — the only one whose hostname also had a hand-created DNS A record — refused every write. Symptom is easy to misread as a corrupt `_id` or a payload problem, because the error is identical regardless of what you change. Resolution: delete the colliding DNS A row from Settings → Policies → DNS records via the UI, then the API accepts the reservation write. Provider-side defense would have to inspect unrelated DNS-record data before each `/rest/user` write — not worth the complexity; a docstring on `terrifi_client_device.local_dns_record` pointing at this finding is sufficient. |
 
 ## Separate from the F-findings: the zone-based-firewall simulation gap
 
