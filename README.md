@@ -1,5 +1,16 @@
 # terrifi
 
+> [!IMPORTANT]
+> **This fork is retired (2026-11-02).** Use the upstream provider,
+> [`alexklibisz/terrifi`](https://github.com/alexklibisz/terraform-provider-terrifi)
+> ([OpenTofu Registry](https://search.opentofu.org/provider/alexklibisz/terrifi/latest)).
+> The fork existed to carry fixes while they were upstreamed. They have since been merged
+> upstream or replaced by the maintainer's own work. The `terrifi_network` PXE-boot and
+> `domain_name` options are still being proposed upstream
+> ([#264](https://github.com/alexklibisz/terraform-provider-terrifi/issues/264)). The published `fdcastel/terrifi` versions (up to v0.10.0) stay in the registry
+> but get no further updates. Note that `fdcastel/terrifi` 0.10.0 and upstream 0.10.0 are different
+> code, so pin upstream **0.12.0 or later** when you switch.
+
 Yet another Terraform provider for UniFi.
 
 ## Introduction
